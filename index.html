@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#071720">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>NadaPlan — Generador de rutinas 10K</title>
+<style>
+  :root{
+    --bg:#071720; --panel:#0d2430; --panel2:#10303f; --line:#1c4152;
+    --ink:#eaf6f6; --muted:#7fa6ad; --aqua:#45d6c8;
+    --r1:#58c9f0; --r2:#ffc24b; --r3:#ff6b5e; --max:#ff4d42;
+    --ok:#57d98a;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;padding-bottom:60px}
+  body::before{content:'';display:block;height:6px;background:repeating-linear-gradient(90deg,var(--aqua) 0 40px,transparent 40px 56px);opacity:.8}
+  .wrap{max-width:780px;margin:0 auto;padding:20px 16px}
+  header h1{font-size:26px;font-weight:800;letter-spacing:-.5px}
+  header h1 span{color:var(--aqua)}
+  header p{color:var(--muted);font-size:13px;margin-top:2px}
+  /* estado de ciclo */
+  .estado{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0 4px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:600}
+  .chip b{color:var(--aqua)}
+  .chip.fase-carga b{color:var(--r2)} .chip.fase-pico b{color:var(--r3)} .chip.fase-descarga b{color:var(--ok)}
+  .badge{border-radius:6px;padding:3px 10px;font-size:12px;font-weight:800;letter-spacing:.5px}
+  .badge.test{background:var(--r2);color:#3a2a00}
+  .badge.tol{background:var(--max);color:#fff}
+  /* tabs */
+  nav{display:flex;gap:6px;margin:18px 0;border-bottom:1px solid var(--line)}
+  nav button{background:none;border:none;color:var(--muted);font:inherit;font-weight:700;font-size:14px;padding:10px 14px;cursor:pointer;border-bottom:3px solid transparent}
+  nav button.act{color:var(--ink);border-bottom-color:var(--aqua)}
+  nav button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
+  /* sesión */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  .ses-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+  .ses-head h2{font-size:20px;font-weight:800}
+  .ses-meta{font-family:var(--mono);font-size:13px;color:var(--muted)}
+  .ses-meta b{color:var(--ink)}
+  .aviso{border-left:3px solid var(--r2);background:rgba(255,194,75,.08);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13.5px;margin:10px 0;color:#ffe1a6}
+  .aviso.rojo{border-color:var(--max);background:rgba(255,77,66,.08);color:#ffb3ad}
+  .aviso.verde{border-color:var(--ok);background:rgba(87,217,138,.08);color:#a9edc4}
+  section.bloq{margin-top:16px}
+  section.bloq h3{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;letter-spacing:1.5px;color:var(--aqua);border-bottom:1px dashed var(--line);padding-bottom:5px;margin-bottom:8px}
+  section.bloq h3 small{font-family:var(--mono);color:var(--muted);letter-spacing:0;font-weight:400}
+  .ln{display:flex;gap:10px;padding:6px 0;font-size:15px;align-items:baseline}
+  .ln .rep{font-family:var(--mono);font-weight:700;white-space:nowrap;min-width:74px;color:var(--ink)}
+  .ln .tx{flex:1;color:#cfe4e6}
+  .ln .so{font-family:var(--mono);font-size:13px;white-space:nowrap;background:var(--panel2);border:1px solid var(--line);padding:2px 8px;border-radius:6px;color:var(--ink)}
+  .sub{padding-left:84px;font-size:13.5px;color:var(--muted);margin-top:-4px;margin-bottom:4px}
+  .r-R1{color:var(--r1);font-weight:700}.r-R2{color:var(--r2);font-weight:700}.r-R3{color:var(--r3);font-weight:700}.r-MAX{color:var(--max);font-weight:800}
+  .leyenda{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;padding-top:10px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+  .acciones{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);font:inherit;font-weight:700;font-size:14px;padding:10px 16px;border-radius:10px;cursor:pointer}
+  .btn:hover{border-color:var(--aqua)}
+  .btn.pri{background:var(--aqua);color:#03252a;border-color:var(--aqua)}
+  .btn.mini{padding:6px 10px;font-size:13px}
+  .navsem{display:flex;gap:8px;align-items:center;margin-left:auto}
+  /* tests */
+  form.testf{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;align-items:end}
+  label.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);font-weight:600}
+  input,select{background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--ink);font:inherit;font-family:var(--mono);padding:9px 10px;width:100%}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+  th{color:var(--muted);font-size:12px;letter-spacing:1px;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:7px 8px;border-bottom:1px solid rgba(28,65,82,.5);font-family:var(--mono)}
+  td.mejor{color:var(--ok);font-weight:700}
+  .grafico{margin-top:14px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .kpi .v{font-family:var(--mono);font-size:22px;font-weight:800;color:var(--aqua)}
+  .kpi .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .hid{display:none}
+  h4.sec{font-size:14px;letter-spacing:1px;color:var(--aqua);margin:18px 0 8px}
+  p.nota{font-size:13.5px;color:var(--muted);margin:6px 0}
+  .twrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  /* ====== MÓVIL ====== */
+  @media(max-width:600px){
+    .wrap{padding:14px 10px}
+    header h1{font-size:22px}
+    header p{font-size:12px}
+    .chip{font-size:12px;padding:4px 10px}
+    nav{gap:0;overflow-x:auto}
+    nav button{padding:10px 10px;font-size:13.5px;white-space:nowrap}
+    .lg{display:none}
+    .card{padding:14px 12px;border-radius:12px}
+    .ses-head h2{font-size:18px}
+    /* línea de rutina: reps + tiempo arriba, consigna abajo */
+    .ln{display:grid;grid-template-columns:auto 1fr;grid-template-areas:'rep so' 'tx tx';row-gap:2px;padding:9px 0;border-bottom:1px solid rgba(28,65,82,.45)}
+    .ln:last-of-type{border-bottom:none}
+    .ln .rep{grid-area:rep;min-width:0;font-size:17px}
+    .ln .so{grid-area:so;justify-self:end;font-size:14px;font-weight:700;background:var(--panel2)}
+    .ln .tx{grid-area:tx;font-size:14.5px;line-height:1.45}
+    .sub{padding-left:0;font-size:13px}
+    /* botones cómodos con el dedo mojado */
+    .acciones{gap:8px}
+    .acciones .btn{flex:1;min-height:46px}
+    .acciones .btn.pri{flex:2}
+    .navsem{margin-left:0;width:100%;justify-content:center}
+    .navsem .btn{flex:0 0 auto;min-width:56px}
+    .kpis{grid-template-columns:1fr 1fr}
+    .kpi .v{font-size:19px}
+    form.testf{grid-template-columns:1fr 1fr}
+    form.testf .btn{grid-column:1/-1;min-height:46px}
+    table{font-size:13px}
+    th,td{padding:6px 6px;white-space:nowrap}
+    .leyenda{gap:8px;font-size:11.5px}
+  }
+  @media(max-width:360px){ .ln .rep{font-size:15px} .ln .so{font-size:13px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Nada<span>Plan</span> · 10K aguas abiertas</h1>
+  <p>Generador de rutinas — estructura ENT CAL · ACT · TPPAL · FINAL, ciclos de 4 semanas con progresión</p>
+</header>
+
+<div class="estado" id="estado"></div>
+
+<nav>
+  <button id="tabR" class="act" onclick="verTab('R')">Rutina</button>
+  <button id="tabT" onclick="verTab('T')">Tests<span class="lg"> y progreso</span></button>
+  <button id="tabC" onclick="verTab('C')">Ajustes</button>
+</nav>
+
+<div id="vR"></div>
+
+<div id="vT" class="hid">
+  <div class="card">
+    <div class="kpis" id="kpis"></div>
+    <h4 class="sec">CARGAR TEST — 3x200 NEGATIVO</h4>
+    <p class="nota">El test aparece en la rutina de la <b>Semana 1 · Sesión 3</b> de cada ciclo. Cargá los tres tiempos (mm:ss) apenas termines; la app calcula tu ritmo promedio /100 y te sugiere el nuevo R1.</p>
+    <form class="testf" onsubmit="guardarTest(event)">
+      <label class="f">Fecha<input type="date" id="tFecha" required></label>
+      <label class="f">200 nº1<input id="t1" placeholder="4:05" required pattern="\d{1,2}:\d{2}"></label>
+      <label class="f">200 nº2<input id="t2" placeholder="4:00" required pattern="\d{1,2}:\d{2}"></label>
+      <label class="f">200 nº3<input id="t3" placeholder="3:55" required pattern="\d{1,2}:\d{2}"></label>
+      <button class="btn pri" type="submit">Guardar test</button>
+    </form>
+    <div id="sugerencia"></div>
+    <div class="grafico" id="grafico"></div>
+    <div class="twrap"><table id="tablaTests"></table></div>
+  </div>
+</div>
+
+<div id="vC" class="hid">
+  <div class="card">
+    <h4 class="sec" style="margin-top:0">MIS PARÁMETROS</h4>
+    <form class="testf" onsubmit="guardarCfg(event)">
+      <label class="f">R1 cada 100 m (mm:ss)<input id="cR1" pattern="\d{1,2}:\d{2}"></label>
+      <label class="f">Minutos por sesión<input id="cMin" type="number" min="40" max="150"></label>
+      <button class="btn pri" type="submit">Guardar</button>
+    </form>
+    <p class="nota">De tu R1 salen R2 (ritmo de carrera, ~8&nbsp;% más rápido) y R3 (umbral, ~15&nbsp;% más rápido), y todos los tiempos "incluido". El tiempo disponible define cuántos metros entran en cada sesión: la app arma la rutina más larga que quepa.</p>
+    <h4 class="sec">POSICIÓN EN EL PLAN</h4>
+    <div class="acciones">
+      <button class="btn" onclick="mover(-1)">‹ Sesión anterior</button>
+      <button class="btn" onclick="mover(1)">Sesión siguiente ›</button>
+      <button class="btn" onclick="reiniciarCiclo()">Reiniciar ciclo actual</button>
+    </div>
+    <p class="nota">Moverte no registra nada: solo cambia qué sesión ves. Para registrar y avanzar usá "Sesión completada" en la rutina.</p>
+    <h4 class="sec">RESPALDO</h4>
+    <div class="acciones">
+      <button class="btn" onclick="exportar()">Exportar datos (.json)</button>
+      <button class="btn" onclick="document.getElementById('imp').click()">Importar datos</button>
+      <input type="file" id="imp" accept=".json" class="hid" onchange="importar(event)">
+      <button class="btn" onclick="borrarTodo()" style="color:var(--r3)">Borrar todo</button>
+    </div>
+    <p class="nota">Los datos viven en este navegador (localStorage). Exportá un respaldo cada tanto, igual que hacés con tus otros tableros.</p>
+  </div>
+</div>
+
+</div>
+<script>
+'use strict';
+/* ============ ESTADO ============ */
+const KEY='nadaplan_v1';
+let S = cargar();
+function cargar(){
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg) return d; }catch(e){}
+  return { cfg:{r1:120,min:90}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[] };
+}
+function persistir(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
+
+/* ============ TIEMPOS ============ */
+const fmt = s => { s=Math.round(s); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
+const parse = t => { const m=/^(\d{1,2}):(\d{2})$/.exec((t||'').trim()); return m? +m[1]*60 + +m[2] : null; };
+const ceil5 = s => Math.ceil(s/5)*5;
+const RIT = {R1:1.00, R2:0.92, R3:0.85, MAX:0.78};
+const MAT = {nado:1, aletas:.85, man:.97, pull:.98, pullman:.96, tec:1.08, patada:1.5, patAletas:1.08, drill:1.18, mixto:1.15, suave:1.1};
+function ritmo100(r){ return S.cfg.r1 * RIT[r]; }
+function nado(dist,r,mat){ return dist/100 * ritmo100(r) * (MAT[mat||'nado']||1); }
+// factor de densidad: los descansos se achican con las semanas y los ciclos ⇒ cada fase es más exigente
+function fDesc(sem,ciclo){
+  const ws=[1, .95, .90, 1.25][sem-1];
+  return Math.max(.72, ws * (1 - .03*(ciclo-1)));
+}
+let CTX={sem:1,ciclo:1};
+function so(dist,r,rest,mat){ return ceil5( nado(dist,r,mat) + rest*fDesc(CTX.sem,CTX.ciclo) ); }
+
+/* ============ RNG con semilla (variedad reproducible) ============ */
+function rng(seed){ let a=seed>>>0; return ()=>{ a|=0;a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function elegir(rand,arr){ return arr[Math.floor(rand()*arr.length)]; }
+
+/* ============ LÍNEAS DE RUTINA ============ */
+// L(reps, dist, texto, sendoffSeg|null, {pausa, extra, ritmo}) → {reps,dist,tx,so,secs,m}
+function L(reps,dist,tx,soSeg,op){
+  op=op||{};
+  const m=reps*dist;
+  let secs;
+  if(soSeg!=null) secs=reps*soSeg;
+  else secs=reps*( nado(dist, op.r||'R1', op.mat) + (op.pausa!=null?op.pausa:15) );
+  secs+= (op.extra||0);
+  return {reps,dist,tx,so:soSeg,secs,m,sub:op.sub||null};
+}
+const pausaBloque = s => ({reps:0,dist:0,tx:null,so:null,secs:s,m:0,pausaLibre:fmt(s)});
+
+/* ============ BIBLIOTECA DE BLOQUES (del cuaderno del entrenador) ============ */
+/* --- Entradas en calor: n = tamaño 1..3 --- */
+const ENTCAL = [
+ n=>({t:'clásica de 75s', ls:[
+   L(4+2*n,75,'4 = 25 barrido 50 nado · resto = 25 patada 50 nado (pausa a gusto)',null,{mat:'mixto',pausa:12}),
+   L(4+2*n,50,'drill a gusto',null,{mat:'drill'})]}),
+ n=>({t:'bloques 50/100', ls:[
+   L(2*(n+1),50,'25 barrido 25 nado (15" de pausa)',null,{mat:'mixto'}),
+   L(2*n,100,'aletas: 50 patada 50 nado (15" de pausa)',null,{mat:'patAletas'})]}),
+ n=>({t:'progresiva larga', ls:[
+   L(1,100+100*n,'25 barrido 25 nado',null,{mat:'mixto',pausa:20}),
+   L(2*n,50,'25 patada 25 nado (10" de pausa)',null,{mat:'mixto',pausa:10}),
+   L(2*n,50,'mitad drill · mitad 25 progresivo 25 suave',so(50,'R2',22,'mixto')),
+   L(1,200,'a gusto',null,{mat:'suave'})]}),
+ n=>({t:'suelta y técnica', ls:[
+   L(n,100,'nado suelto (15" de pausa)',null,{mat:'suave'}),
+   L(n,200,'50 drill 50 nado (15" de pausa)',null,{mat:'mixto'}),
+   L(2*n,50,'pullboy y manoplas, brazada de crol (15" de pausa)',null,{mat:'pullman'})]}),
+ n=>({t:'combinada con manoplas', ls:[
+   L(2*n,100,'25 barrido 25 patada 50 nado (10/20" de pausa)',null,{mat:'mixto',pausa:18}),
+   L(2*n,50,'drill con manoplas (2da mitad: con aletas)',null,{mat:'drill'})]})
+];
+/* --- Activaciones --- */
+const ACT = [
+ ()=>({t:'progresivos', ls:[ L(6,50,'25 progresivo 25 suave',so(50,'R2',25,'mixto')) ]}),
+ ()=>({t:'clásica del entrenador', ls:[
+   L(6,50,'15 máx 35 suave (de a pares por serie)',so(50,'R2',25)),
+   L(3,75,'25 progresivo 50 suave',so(75,'R2',30,'suave')),
+   L(3,25,'AL MÁX',so(25,'MAX',35),{sub:'+ 50 suave y 1:30 antes de la próxima serie'}),
+   L(3,50,'suave',null,{mat:'suave',pausa:90})]}),
+ ()=>({t:'fuerza y partida', ls:[
+   L(6,50,'nado con fuerza',so(50,'R2',20)),
+   L(2,25,'al máximo con partida + 1 minuto',so(25,'MAX',60))]}),
+ ()=>({t:'aletas y velocidad', ls:[
+   L(3,50,'aletas: 20 máximo 30 suave',so(50,'R2',20,'aletas')),
+   L(5,50,'25 progresivo (de menos a más) 25 suave',so(50,'R2',20,'mixto'))]}),
+ ()=>({t:'partidas cortas', ls:[
+   L(6,25,'progresivo 1@3, el 3ro con partida',so(25,'R3',25)),
+   L(2,75,'suaves',null,{mat:'suave'})]})
+];
+/* --- Finales: n tamaño --- */
+const FINAL = [
+ n=>({t:'patada regenerativa', ls:[ L(4+2*n,50,'aletas, patada suave (10" de pausa)',null,{mat:'patAletas',pausa:10}), L(1,100,'libre y LISTO',null,{mat:'suave'}) ]}),
+ n=>({t:'brazada larga', ls:[ L(n+1,200,'manoplas y pullboy, brazada (15" de pausa)',null,{mat:'pullman'}) ]}),
+ n=>({t:'postura', ls:[ L(2*n+1,100,'aletas: 25 patada postura 75 nado a gusto (15" de pausa)',null,{mat:'patAletas'}) ]}),
+ n=>({t:'suelto', ls:[ L(1,100+100*n,'suave a gusto y LISTO',null,{mat:'suave'}) ]})
+];
+/* --- TPPAL Día 1 · aeróbico base --- */
+const D1 = [
+ n=>({t:'tres series aeróbicas', ls:[
+   L(n,200,['nado crol ','R1',' cómodo'],so(200,'R1',22)),
+   pausaBloque(90),
+   L(n+1,150,['nado ','R2'],so(150,'R2',22)),
+   pausaBloque(90),
+   L(2*n,100,['manoplas ','R2'],so(100,'R2',20,'man'))]}),
+ n=>({t:'reducción de descanso', ls:[
+   L(3*n,100,['crol, reducción de descanso (los últimos ',String(n),' con manoplas): salida 1 amplia, 2 media, 3 apretada — y repiten'],so(100,'R2',25),{sub:'salidas: '+fmt(so(100,'R2',30))+' → '+fmt(so(100,'R2',22))+' → '+fmt(so(100,'R2',15))}),
+   pausaBloque(90),
+   L(2,400,['pullboy y manoplas, cómodo pero continuo ','R1'],so(400,'R1',35,'pullman')),
+   L(n,100,['nado ','R2'],so(100,'R2',20))]}),
+ n=>({t:'pirámide de volumen', ls:[
+   L(n+1,200,['aeróbico bajo ','R1'],so(200,'R1',22)),
+   L(n-0,100,['manoplas aeróbico bajo ','R1'],so(100,'R1',18,'man')),
+   L(2*n,50,['aeróbico medio ','R2'],so(50,'R2',18)),
+   pausaBloque(90),
+   L(n,200,['aeróbico bajo ','R1'],so(200,'R1',22)),
+   L(n,100,['manoplas ','R1'],so(100,'R1',18,'man')),
+   L(n+1,50,['aeróbico medio ','R2'],so(50,'R2',18))]})
+];
+/* --- TPPAL Día 2 · velocidad y técnica --- */
+const D2 = [
+ n=>({t:'técnica y máximos', ls:[
+   L(2*n,50,['nado crol ','R2','/','R3'],so(50,'R3',30)),
+   L(2*n,100,'nado técnico con aletas, cuerpo alto',so(100,'R1',25,'tec')),
+   L(n,50,['AL MÁXIMO',' + 2 minutos de descanso'],so(50,'MAX',120)),
+   ],sub:'organizado en '+n+' series: 2x50 + 2x100 + 50'}),
+ n=>({t:'bloques de partida', ls:[
+   L(1,50,'de arriba: 25 máximo 25 suave',so(50,'MAX',35)),
+   L(1,150,['a ','R2'],so(150,'R2',22)),
+   L(1,100,'suave',null,{mat:'suave',pausa:20}),
+   L(4*n-2,50,'progresivo 1@'+(4*n-2)+' cada 2 pasadas',so(50,'R2',25)),
+   pausaBloque(90),
+   L(1,50,'con partida, salida de carrera',so(50,'MAX',40)),
+   L(n,100,['50 a ','R3',' 50 cómodo'],so(100,'R3',35)),
+   L(n+2,50,'progresivo 1@'+(n+2)+', el último con partida al mejor nivel',so(50,'R3',35))]}),
+ n=>({t:'escalera de ritmos', ls:[
+   L(1,200,['negativo: 100 ','R1',' / 100 ','R3'],so(200,'R2',35)),
+   L(4,50,['aletas: 25 progresivo 25 cómodo'],so(50,'R2',20,'aletas')),
+   pausaBloque(90),
+   L(n,100,['a ','R3'],so(100,'R3',35)),
+   L(2*n,50,['mitad a ','R2',' mitad a ','R3'],so(50,'R3',30)),
+   L(1,200,['negativo, mejorar el primero: 100 ','R1',' / 100 ','R3'],so(200,'R2',35))]})
+];
+/* --- TPPAL Día 3 · resistencia específica --- */
+const D3 = [
+ n=>({t:'mixto de resistencia', ls:[
+   L(4*n-2,50,['2x','R2',' + 1x','R3',' + 1x','R1',' (y repiten)'],so(50,'R2',22)),
+   pausaBloque(90),
+   L(n,150,['manoplas a ','R2'],so(150,'R2',22,'man')),
+   L(1,200,['suelto ','R1'],null,{mat:'suave',pausa:30}),
+   pausaBloque(90),
+   L(n,200,['negativo: 100 ','R1',' / 100 ','R2'],so(200,'R1',25))]}),
+ n=>({t:'bloques largos apretados', ls:[
+   L(n,150,['100 ','R2',' 50 cómodo'],so(150,'R2',25)),
+   L(2,200,'aletas y manoplas, crol con descanso apretado',so(200,'R2',15,'aletas')),
+   pausaBloque(90),
+   L(n+1,100,'progresivo 1@'+(n+1)+' manteniendo número de brazadas',so(100,'R2',28)),
+   L(n+2,50,'25 al máximo 25 suave',so(50,'R3',25)),
+   pausaBloque(90),
+   L(1,100,'nado técnico',so(100,'R1',25,'tec')),
+   L(1,200,['a ','R3'],so(200,'R3',40))]}),
+ n=>({t:'simulacro de río', ls:[
+   L(1,400,['','R2',' parejo — empuje suave de pared, SIN deslizamiento subacuático (en el río no hay paredes)'],so(400,'R2',30)),
+   L(1,100,'suave de recuperación',null,{mat:'suave',pausa:15}),
+   L(1,400,['','R2',' — orientación cada 6–8 brazadas sin frenar la cadencia'],so(400,'R2',30)),
+   L(1,100,'suave de recuperación',null,{mat:'suave',pausa:15}),
+   L(Math.max(1,n-1),400,['','R2',' — cadencia más alta, brazada un poco más corta (aguanta el oleaje)'],so(400,'R2',30)),
+   L(Math.max(1,n-1),100,'suave de recuperación',null,{mat:'suave',pausa:15}),
+   pausaBloque(60),
+   L(2*n+2,50,['escalera: de ','R1',' a mejor nivel posible, de a pares'],so(50,'R2',30))]})
+];
+/* --- Tolerancia al lactato (esporádico: semana 3 de ciclos pares) --- */
+const TOL = n=>({t:'tolerancia al lactato', ls:[
+   L(4+n,50,['AL MÁXIMO',' — sostener técnica aunque queme'],so(50,'MAX',95),{sub:'descanso largo a propósito: calidad, no volumen'}),
+   L(1,300,['regenerativo ','R1',' muy suave'],null,{mat:'suave',pausa:60}),
+   L(4+n,50,['AL MÁXIMO',' — igualar los tiempos del primer bloque'],so(50,'MAX',95)),
+   L(1,300,['regenerativo ','R1',' muy suave'],null,{mat:'suave',pausa:60})]});
+/* --- Test --- */
+const TEST = ()=>({t:'TEST · 3x200 negativo', ls:[
+   L(3,200,['TEST cronometrado — negativo: 100 ','R1',' / 100 ','R2',' — anotá cada tiempo'],so(200,'R1',45),{sub:'al terminar, cargá los 3 tiempos en la pestaña "Tests y progreso"'})]});
+/* --- Descarga (semana 4) --- */
+const DESCARGA = {
+ 1:n=>({t:'aeróbico suave', ls:[
+   L(2*n,100,['crol ','R1',' cómodo'],so(100,'R1',25)),
+   L(2*n,50,'nado técnico, cuerpo alto',so(50,'R1',25,'tec')),
+   L(4,50,'25 progresivo 25 suave',so(50,'R2',28,'mixto'))]}),
+ 2:n=>({t:'técnica y chispa', ls:[
+   L(2,50,'con partida, inicio de carrera',so(50,'MAX',40)),
+   L(2,100,['','R1',' técnico'],so(100,'R1',30,'tec')),
+   pausaBloque(120),
+   L(2,50,'con partida, inicio de carrera',so(50,'MAX',40)),
+   L(2,100,['','R1',' técnico'],so(100,'R1',30,'tec'))]}),
+ 3:n=>({t:'activación pre-competencia', ls:[
+   L(2,150,'progresivo bloque a bloque',so(150,'R2',30),{sub:'+ 1 minuto entre bloques'}),
+   L(4,50,'progresivo bloque a bloque',so(50,'R2',25)),
+   L(1,400,['crol ','R2',' continuo, ritmo de carrera, recordando la sensación'],so(400,'R2',40)),
+   L(3,50,'progresivo 1@3, el 3ro fuerte',so(50,'R3',35))]})
+};
+
+/* ============ GENERADOR ============ */
+const FASES=['BASE','CARGA','PICO','DESCARGA'];
+const DIAS={1:'Aeróbico base',2:'Velocidad y técnica',3:'Resistencia específica'};
+function esTolerancia(p){ return p.ciclo%2===0 && p.sem===3 && p.dia===2; }
+function esTest(p){ return p.sem===1 && p.dia===3; }
+
+function construir(p,minutos){
+  CTX={sem:p.sem,ciclo:p.ciclo};
+  const vKey=p.ciclo+'-'+p.sem+'-'+p.dia;
+  const seed=p.ciclo*1000+p.sem*100+p.dia*10+(S.variante[vKey]||0);
+  const rand=rng(seed);
+  const presupuesto=minutos*60-150; // colchón para entrar/salir del agua
+  const tol=esTolerancia(p), test=esTest(p), desc=p.sem===4;
+
+  const iEC=Math.floor(rand()*ENTCAL.length), iA=Math.floor(rand()*ACT.length), iF=Math.floor(rand()*FINAL.length);
+  let iM;
+  if(desc) iM=0;
+  else if(p.dia===3 && p.sem===3) iM=2;                    // simulacro de río fijo en el pico
+  else { const pool=(p.dia===1?D1:p.dia===2?D2:D3); iM=Math.floor(rand()*(p.dia===3?2:pool.length)); }
+
+  function arma(n,w,lean){
+    const bloques=[];
+    bloques.push({sec:'ENT CAL', ...ENTCAL[iEC](w)});
+    if(!desc && !lean) bloques.push({sec:'ACT', ...ACT[iA]()});
+    let main;
+    if(desc)      main=DESCARGA[p.dia](Math.max(1,n));
+    else if(tol)  main=TOL(n);
+    else          main=(p.dia===1?D1:p.dia===2?D2:D3)[iM](Math.max(1,n));
+    if(test){ bloques.push({sec:'TPPAL · '+main.t, ls:main.ls, sub:main.sub}); bloques.push({sec:'TEST', ...TEST()}); }
+    else bloques.push({sec:'TPPAL · '+main.t, ls:main.ls, sub:main.sub});
+    bloques.push({sec:'FINAL', ...(lean?FINAL[3](1):FINAL[iF](desc?1:w))});
+    let secs=0,m=0;
+    bloques.forEach(b=>b.ls.forEach(l=>{secs+=l.secs;m+=l.m;}));
+    return {bloques,secs,m};
+  }
+  // buscar la sesión más grande que quepa en el tiempo disponible
+  let mejor=null;
+  const nMax = desc||tol ? 3 : 5;
+  for(let n=nMax;n>=1;n--){
+    const w = n>=4?3 : n>=2?2 : 1;
+    const cand=arma(n,w,false);
+    if(cand.secs<=presupuesto){ mejor=cand; break; }
+    if(n===1) mejor=cand;
+  }
+  // si ni la mínima entra: versión recortada (sin ACT, final mínimo)
+  if(mejor.secs>presupuesto){
+    const lean=arma(1,1,true);
+    lean.recortada=true;
+    mejor=lean;
+  }
+  mejor.excedido = mejor.secs>presupuesto;
+  mejor.tol=tol; mejor.test=test; mejor.desc=desc;
+  return mejor;
+}
+
+/* ============ RENDER ============ */
+function ritmoHtml(tx){
+  if(Array.isArray(tx)) return tx.map(t=>['R1','R2','R3'].includes(t)?'<span class="r-'+t+'">'+t+'</span>':(t==='AL MÁXIMO'?'<span class="r-MAX">AL MÁXIMO</span>':t)).join('');
+  return tx.replace('AL MÁXIMO','<span class="r-MAX">AL MÁXIMO</span>').replace('AL MÁX','<span class="r-MAX">AL MÁX</span>');
+}
+function render(){
+  const p=S.pos;
+  const fase=FASES[p.sem-1];
+  const est=document.getElementById('estado');
+  est.innerHTML=
+    '<span class="chip">Ciclo <b>'+p.ciclo+'</b></span>'+
+    '<span class="chip fase-'+fase.toLowerCase()+'">Semana '+p.sem+' · <b>'+fase+'</b></span>'+
+    '<span class="chip">Sesión <b>'+p.dia+'/3</b> — '+(p.sem===4?'Descarga':DIAS[p.dia])+'</span>'+
+    (esTest(p)?'<span class="badge test">TEST</span>':'')+
+    (esTolerancia(p)?'<span class="badge tol">TOLERANCIA</span>':'');
+
+  const ses=construir(p,S.cfg.min);
+  let h='<div class="card">';
+  h+='<div class="ses-head"><h2>'+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</h2>';
+  h+='<span class="ses-meta"><b>'+ses.m.toLocaleString('es-AR')+' m</b> · ~'+Math.round(ses.secs/60)+' min de '+S.cfg.min+' disponibles</span></div>';
+  if(ses.recortada && !ses.excedido) h+='<div class="aviso">Versión recortada para que entre en '+S.cfg.min+' min: sin activación y con final mínimo. Con 70–75 min tendrías la sesión completa.</div>';
+  if(ses.excedido) h+='<div class="aviso rojo">Ni la versión recortada entra en '+S.cfg.min+' min: te va a llevar ~'+Math.round(ses.secs/60)+' min. Cortá donde puedas o sumá minutos en Ajustes.</div>';
+  if(ses.test) h+='<div class="aviso">Hoy hay <b>TEST</b>: cronometrá los 3x200 del bloque final del TPPAL y cargalos en "Tests y progreso".</div>';
+  if(ses.tol) h+='<div class="aviso rojo">Sesión esporádica de <b>tolerancia</b>: poco volumen, máxima intensidad, descansos largos. No la repitas por tu cuenta — vuelve recién en dos ciclos.</div>';
+  if(ses.desc) h+='<div class="aviso verde">Semana de <b>descarga</b>: todo cómodo, sin forzar. Acá se asimila la carga de las tres semanas anteriores.</div>';
+  const c=p.ciclo, dens=Math.round((1-fDesc(p.sem,c)/([1,.95,.9,1.25][p.sem-1]))*100);
+  if(c>1 && p.sem<4) h+='<div class="aviso">Ciclo '+c+': descansos ~'+dens+'&nbsp;% más apretados que en el ciclo 1, con tus mismos ritmos. Si actualizaste el R1 con un test, la exigencia ya está incorporada en los tiempos.</div>';
+
+  ses.bloques.forEach(b=>{
+    const mB=b.ls.reduce((a,l)=>a+l.m,0);
+    h+='<section class="bloq"><h3>'+b.sec+'<small>'+(mB?mB+' m':'')+'</small></h3>';
+    if(b.sub) h+='<p class="nota">'+b.sub+'</p>';
+    b.ls.forEach(l=>{
+      if(l.pausaLibre){ h+='<div class="ln"><span class="rep">—</span><span class="tx" style="color:var(--muted)">pausa '+l.pausaLibre+' entre bloques</span></div>'; return; }
+      h+='<div class="ln"><span class="rep">'+l.reps+'x'+l.dist+'</span><span class="tx">'+ritmoHtml(l.tx)+'</span>'+(l.so?'<span class="so">en '+fmt(l.so)+' incluido</span>':'')+'</div>';
+      if(l.sub) h+='<div class="sub">↳ '+l.sub+'</div>';
+    });
+    h+='</section>';
+  });
+  h+='<div class="leyenda"><span><span class="r-R1">R1</span> '+fmt(ritmo100('R1'))+'/100 cómodo</span><span><span class="r-R2">R2</span> '+fmt(ritmo100('R2'))+'/100 carrera</span><span><span class="r-R3">R3</span> '+fmt(ritmo100('R3'))+'/100 umbral</span><span>"incluido" = nado + descanso</span></div>';
+  h+='</div><div class="acciones"><button class="btn" onclick="otraVariante()">↻ Otra variante</button><button class="btn pri" onclick="completar()">Sesión completada ✓</button><span class="navsem"><button class="btn mini" onclick="mover(-1)">‹</button><button class="btn mini" onclick="mover(1)">›</button></span></div>';
+  document.getElementById('vR').innerHTML=h;
+  renderTests();
+}
+
+/* ============ ACCIONES ============ */
+function otraVariante(){ const k=S.pos.ciclo+'-'+S.pos.sem+'-'+S.pos.dia; S.variante[k]=(S.variante[k]||0)+1; persistir(); render(); }
+function mover(d){
+  let {ciclo,sem,dia}=S.pos; dia+=d;
+  if(dia>3){dia=1;sem++;} if(dia<1){dia=3;sem--;}
+  if(sem>4){sem=1;ciclo++;} if(sem<1){ if(ciclo>1){ciclo--;sem=4;} else {sem=1;dia=1;} }
+  S.pos={ciclo,sem,dia}; persistir(); render();
+}
+function completar(){
+  const ses=construir(S.pos,S.cfg.min);
+  S.sesiones.push({f:new Date().toISOString().slice(0,10), c:S.pos.ciclo, s:S.pos.sem, d:S.pos.dia, m:ses.m});
+  mover(1);
+}
+function reiniciarCiclo(){ if(confirm('¿Volver a Semana 1 · Sesión 1 del ciclo actual?')){ S.pos.sem=1;S.pos.dia=1;persistir();render(); } }
+
+/* ============ TESTS ============ */
+function guardarTest(ev){
+  ev.preventDefault();
+  const t1=parse(t1i.value),t2=parse(t2i.value),t3=parse(t3i.value);
+  const f=document.getElementById('tFecha').value;
+  if(t1==null||t2==null||t3==null){ alert('Formato de tiempo: mm:ss (ej. 4:05)'); return; }
+  const prom=(t1+t2+t3)/3, pace=prom/2; // ritmo /100
+  S.tests.push({f,t:[t1,t2,t3],pace});
+  S.tests.sort((a,b)=>a.f.localeCompare(b.f));
+  persistir(); renderTests();
+  const sug=ceil1(pace+10);
+  document.getElementById('sugerencia').innerHTML=
+    '<div class="aviso verde">Ritmo promedio del test: <b>'+fmt(pace)+'/100</b>. R1 sugerido: <b>'+fmt(sug)+'/100</b> (test + 10"). '+
+    (sug<S.cfg.r1?'<button class="btn mini pri" style="margin-left:8px" onclick="aplicarR1('+sug+')">Aplicar nuevo R1</button>':'Tu R1 actual ('+fmt(S.cfg.r1)+') sigue siendo válido.')+'</div>';
+  ev.target.reset();
+}
+const ceil1=s=>Math.round(s);
+const t1i=document.getElementById('t1'),t2i=document.getElementById('t2'),t3i=document.getElementById('t3');
+function aplicarR1(s){ S.cfg.r1=s; persistir(); render(); document.getElementById('sugerencia').innerHTML='<div class="aviso verde">R1 actualizado a <b>'+fmt(s)+'/100</b>. Todas las próximas rutinas ya salen con los nuevos tiempos.</div>'; }
+
+function renderTests(){
+  const km=(S.sesiones.reduce((a,s)=>a+s.m,0)/1000);
+  const mejor=S.tests.length?Math.min(...S.tests.map(t=>t.pace)):null;
+  document.getElementById('kpis').innerHTML=
+    '<div class="kpi"><div class="v">'+S.sesiones.length+'</div><div class="l">sesiones completadas</div></div>'+
+    '<div class="kpi"><div class="v">'+km.toFixed(1)+' km</div><div class="l">nadados en el plan</div></div>'+
+    '<div class="kpi"><div class="v">'+(mejor?fmt(mejor):'—')+'</div><div class="l">mejor ritmo de test /100</div></div>'+
+    '<div class="kpi"><div class="v">'+fmt(S.cfg.r1)+'</div><div class="l">R1 vigente /100</div></div>';
+  // tabla
+  let th='<tr><th>Fecha</th><th>200 nº1</th><th>200 nº2</th><th>200 nº3</th><th>Ritmo /100</th></tr>';
+  S.tests.slice().reverse().forEach(t=>{
+    th+='<tr><td>'+t.f+'</td><td>'+fmt(t.t[0])+'</td><td>'+fmt(t.t[1])+'</td><td>'+fmt(t.t[2])+'</td><td class="'+(t.pace===mejor?'mejor':'')+'">'+fmt(t.pace)+'</td></tr>';
+  });
+  document.getElementById('tablaTests').innerHTML=S.tests.length?th:'';
+  // gráfico SVG (ritmo /100: más abajo = mejor)
+  const g=document.getElementById('grafico');
+  if(S.tests.length<2){ g.innerHTML='<p class="nota" style="text-align:center">'+(S.tests.length?'Cargá un segundo test para ver la curva de progreso.':'Todavía no hay tests. El primero aparece en la rutina de Semana 1 · Sesión 3.')+'</p>'; return; }
+  const W=680,H=200,P=44, ps=S.tests.map(t=>t.pace);
+  const min=Math.min(...ps)-4, max=Math.max(...ps)+4;
+  const X=i=>P+ i*(W-P-14)/(ps.length-1);
+  const Y=v=>P/2 + (v-min)*(H-P)/(max-min);
+  let svg='<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Progreso del ritmo de test">';
+  [min,(min+max)/2,max].forEach(v=>{ svg+='<line x1="'+P+'" x2="'+(W-10)+'" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="#1c4152" stroke-dasharray="3 4"/><text x="4" y="'+(Y(v)+4)+'" fill="#7fa6ad" font-size="11" font-family="monospace">'+fmt(v)+'</text>'; });
+  svg+='<polyline fill="none" stroke="#45d6c8" stroke-width="2.5" points="'+ps.map((v,i)=>X(i)+','+Y(v)).join(' ')+'"/>';
+  ps.forEach((v,i)=>{ svg+='<circle cx="'+X(i)+'" cy="'+Y(v)+'" r="4" fill="#45d6c8"/><text x="'+X(i)+'" y="'+(H-4)+'" fill="#7fa6ad" font-size="10" text-anchor="middle" font-family="monospace">'+S.tests[i].f.slice(5)+'</text>'; });
+  svg+='</svg>';
+  g.innerHTML=svg;
+}
+
+/* ============ CONFIG / RESPALDO ============ */
+function verTab(t){
+  ['R','T','C'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
+  if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; }
+}
+function guardarCfg(ev){
+  ev.preventDefault();
+  const r=parse(document.getElementById('cR1').value), m=+document.getElementById('cMin').value;
+  if(r) S.cfg.r1=r; if(m>=40&&m<=150) S.cfg.min=m;
+  persistir(); render(); verTab('R');
+}
+function exportar(){
+  const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(b);
+  a.download='nadaplan_backup_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
+}
+function importar(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.cfg&&d.pos){ S=d; persistir(); render(); alert('Datos importados.'); } else alert('El archivo no tiene el formato de NadaPlan.'); }catch(e){ alert('No se pudo leer el archivo.'); } };
+  r.readAsText(f);
+}
+function borrarTodo(){ if(confirm('Se borra TODO: configuración, historial y tests. ¿Seguro?')){ localStorage.removeItem(KEY); S=cargar(); render(); } }
+
+document.getElementById('tFecha').value=new Date().toISOString().slice(0,10);
+render();
+</script>
+</body>
+</html>
