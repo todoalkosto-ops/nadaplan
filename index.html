@@ -111,6 +111,32 @@
     .leyenda{gap:8px;font-size:11.5px}
   }
   @media(max-width:360px){ .ln .rep{font-size:15px} .ln .so{font-size:13px} }
+  /* ====== FUENTES ====== */
+  details.fitem{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)}
+  details.fitem summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:700;font-size:14.5px}
+  details.fitem summary::-webkit-details-marker{display:none}
+  details.fitem summary small{color:var(--muted);font-weight:400;font-family:var(--mono);font-size:12px}
+  details.fitem pre{white-space:pre-wrap;font-family:var(--mono);font-size:13px;color:#cfe4e6;margin:10px 0;line-height:1.5}
+  /* ====== IMPRESIÓN ====== */
+  #printArea{display:none}
+  @media print{
+    body{background:#fff!important;color:#000;padding:0}
+    body::before{display:none}
+    body *{visibility:hidden}
+    #printArea,#printArea *{visibility:visible}
+    #printArea{display:block!important;position:absolute;left:0;top:0;width:100%;color:#000;font:11.5px/1.35 system-ui,sans-serif}
+    #printArea .ph{font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin-bottom:2px}
+    #printArea .pm{font-family:var(--mono);font-size:10.5px;color:#333;margin-bottom:6px}
+    #printArea .pav{font-size:10.5px;border-left:3px solid #000;padding-left:6px;margin:4px 0;color:#222}
+    #printArea h3{font-size:11px;letter-spacing:1.5px;border-bottom:1px solid #999;margin:8px 0 3px;display:flex;justify-content:space-between}
+    #printArea h3 small{font-weight:400;color:#555;letter-spacing:0}
+    #printArea .pl{display:flex;gap:8px;padding:1.5px 0;align-items:baseline}
+    #printArea .pl .rep{font-family:var(--mono);font-weight:700;min-width:52px;white-space:nowrap}
+    #printArea .pl .tx{flex:1}
+    #printArea .pl .so{font-family:var(--mono);font-weight:700;white-space:nowrap}
+    #printArea .psub{font-size:10px;color:#555;padding-left:60px}
+    #printArea .pleg{font-family:var(--mono);font-size:10px;color:#333;border-top:1px solid #999;margin-top:8px;padding-top:4px}
+  }
 </style>
 </head>
 <body>
@@ -125,10 +151,29 @@
 <nav>
   <button id="tabR" class="act" onclick="verTab('R')">Rutina</button>
   <button id="tabT" onclick="verTab('T')">Tests<span class="lg"> y progreso</span></button>
+  <button id="tabF" onclick="verTab('F')">Fuentes</button>
   <button id="tabC" onclick="verTab('C')">Ajustes</button>
 </nav>
 
 <div id="vR"></div>
+
+<div id="vF" class="hid">
+  <div class="card">
+    <h4 class="sec" style="margin-top:0" id="fTitulo">AGREGAR FUENTE</h4>
+    <p class="nota">Guardá acá rutinas que consigas de otros lados (entrenadores, videos, revistas). Quedan como biblioteca de consulta para armar variantes nuevas.</p>
+    <form class="testf" style="grid-template-columns:1fr" onsubmit="guardarFuente(event)">
+      <label class="f">Título<input id="fT" required placeholder="Ej: Serie de umbral de Entrenador X"></label>
+      <label class="f">Origen (opcional)<input id="fO" placeholder="Ej: revista, YouTube, club"></label>
+      <label class="f">Contenido<textarea id="fC" rows="7" required placeholder="Pegá acá la rutina completa..." style="font-family:var(--mono);font-size:13px;resize:vertical"></textarea></label>
+      <div class="acciones" style="margin:0"><button class="btn pri" type="submit">Guardar fuente</button><button class="btn hid" type="button" id="fCancel" onclick="cancelarFuente()">Cancelar edición</button></div>
+    </form>
+    <h4 class="sec">MI BIBLIOTECA</h4>
+    <input id="fBuscar" placeholder="Buscar en la biblioteca..." oninput="renderFuentes()" style="margin-bottom:8px">
+    <div id="listaFuentes"></div>
+  </div>
+</div>
+
+<div id="printArea"></div>
 
 <div id="vT" class="hid">
   <div class="card">
@@ -145,6 +190,8 @@
     <div id="sugerencia"></div>
     <div class="grafico" id="grafico"></div>
     <div class="twrap"><table id="tablaTests"></table></div>
+    <h4 class="sec">SESIONES COMPLETADAS</h4>
+    <div class="twrap"><table id="tablaSesiones"></table></div>
   </div>
 </div>
 
@@ -182,8 +229,8 @@
 const KEY='nadaplan_v1';
 let S = cargar();
 function cargar(){
-  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg) return d; }catch(e){}
-  return { cfg:{r1:120,min:90}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[] };
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; return d; } }catch(e){}
+  return { cfg:{r1:120,min:90}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[] };
 }
 function persistir(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
 
@@ -441,9 +488,10 @@ function render(){
     (esTolerancia(p)?'<span class="badge tol">TOLERANCIA</span>':'');
 
   const ses=construir(p,S.cfg.min);
+  const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   let h='<div class="card">';
   h+='<div class="ses-head"><h2>'+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</h2>';
-  h+='<span class="ses-meta"><b>'+ses.m.toLocaleString('es-AR')+' m</b> · ~'+Math.round(ses.secs/60)+' min de '+S.cfg.min+' disponibles</span></div>';
+  h+='<span class="ses-meta">Sesión <b>N° '+(S.sesiones.length+1)+'</b> · '+hoy+' · <b>'+ses.m.toLocaleString('es-AR')+' m</b> · ~'+Math.round(ses.secs/60)+' min de '+S.cfg.min+' disponibles</span></div>';
   if(ses.recortada && !ses.excedido) h+='<div class="aviso">Versión recortada para que entre en '+S.cfg.min+' min: sin activación y con final mínimo. Con 70–75 min tendrías la sesión completa.</div>';
   if(ses.excedido) h+='<div class="aviso rojo">Ni la versión recortada entra en '+S.cfg.min+' min: te va a llevar ~'+Math.round(ses.secs/60)+' min. Cortá donde puedas o sumá minutos en Ajustes.</div>';
   if(ses.test) h+='<div class="aviso">Hoy hay <b>TEST</b>: cronometrá los 3x200 del bloque final del TPPAL y cargalos en "Tests y progreso".</div>';
@@ -464,9 +512,10 @@ function render(){
     h+='</section>';
   });
   h+='<div class="leyenda"><span><span class="r-R1">R1</span> '+fmt(ritmo100('R1'))+'/100 cómodo</span><span><span class="r-R2">R2</span> '+fmt(ritmo100('R2'))+'/100 carrera</span><span><span class="r-R3">R3</span> '+fmt(ritmo100('R3'))+'/100 umbral</span><span>"incluido" = nado + descanso</span></div>';
-  h+='</div><div class="acciones"><button class="btn" onclick="otraVariante()">↻ Otra variante</button><button class="btn pri" onclick="completar()">Sesión completada ✓</button><span class="navsem"><button class="btn mini" onclick="mover(-1)">‹</button><button class="btn mini" onclick="mover(1)">›</button></span></div>';
+  h+='</div><div class="acciones"><button class="btn" onclick="otraVariante()">↻ Otra variante</button><button class="btn" onclick="imprimirSesion()">🖨 Imprimir / PDF</button><button class="btn pri" onclick="completar()">Sesión completada ✓</button><span class="navsem"><button class="btn mini" onclick="mover(-1)">‹</button><button class="btn mini" onclick="mover(1)">›</button></span></div>';
   document.getElementById('vR').innerHTML=h;
   renderTests();
+  renderSesiones();
 }
 
 /* ============ ACCIONES ============ */
@@ -532,11 +581,85 @@ function renderTests(){
   svg+='</svg>';
   g.innerHTML=svg;
 }
+function renderSesiones(){
+  const box=document.getElementById('tablaSesiones'); if(!box) return;
+  if(!S.sesiones.length){ box.innerHTML=''; return; }
+  let th='<tr><th>N°</th><th>Fecha</th><th>Ciclo</th><th>Sem</th><th>Día</th><th>Metros</th></tr>';
+  S.sesiones.map((s,i)=>({...s,n:i+1})).slice().reverse().forEach(s=>{
+    th+='<tr><td>'+s.n+'</td><td>'+s.f+'</td><td>'+s.c+'</td><td>'+s.s+' ('+FASES[s.s-1]+')</td><td>'+s.d+'/3</td><td>'+s.m.toLocaleString('es-AR')+'</td></tr>';
+  });
+  box.innerHTML=th;
+}
+
+/* ============ IMPRESIÓN ============ */
+const plainTx=tx=>Array.isArray(tx)?tx.join(''):tx;
+const escF=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function imprimirSesion(){
+  const p=S.pos, ses=construir(p,S.cfg.min);
+  const fase=FASES[p.sem-1];
+  const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  let h='<div class="ph">NadaPlan — '+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</div>';
+  h+='<div class="pm">Sesión N° '+(S.sesiones.length+1)+' · '+hoy+' · Ciclo '+p.ciclo+' · Semana '+p.sem+' ('+fase+') · Día '+p.dia+'/3 · '+ses.m.toLocaleString('es-AR')+' m · ~'+Math.round(ses.secs/60)+' min</div>';
+  if(ses.test) h+='<div class="pav">TEST: cronometrar los 3x200 del final del TPPAL y cargarlos en la app.</div>';
+  if(ses.tol) h+='<div class="pav">Sesión esporádica de tolerancia: poco volumen, máxima intensidad, descansos largos.</div>';
+  if(ses.desc) h+='<div class="pav">Semana de descarga: todo cómodo, sin forzar.</div>';
+  ses.bloques.forEach(b=>{
+    const mB=b.ls.reduce((a,l)=>a+l.m,0);
+    h+='<h3>'+escF(b.sec)+'<small>'+(mB?mB+' m':'')+'</small></h3>';
+    if(b.sub) h+='<div class="psub">'+escF(b.sub)+'</div>';
+    b.ls.forEach(l=>{
+      if(l.pausaLibre){ h+='<div class="pl"><span class="rep">—</span><span class="tx">pausa '+l.pausaLibre+' entre bloques</span></div>'; return; }
+      h+='<div class="pl"><span class="rep">'+l.reps+'x'+l.dist+'</span><span class="tx">'+escF(plainTx(l.tx))+'</span>'+(l.so?'<span class="so">'+fmt(l.so)+' inc</span>':'')+'</div>';
+      if(l.sub) h+='<div class="psub">↳ '+escF(l.sub)+'</div>';
+    });
+  });
+  h+='<div class="pleg">R1 '+fmt(ritmo100('R1'))+'/100 cómodo · R2 '+fmt(ritmo100('R2'))+'/100 carrera · R3 '+fmt(ritmo100('R3'))+'/100 umbral · "inc" = nado + descanso incluidos en la salida</div>';
+  document.getElementById('printArea').innerHTML=h;
+  window.print();
+}
+
+/* ============ FUENTES (biblioteca de rutinas externas) ============ */
+let fEdit=-1;
+function guardarFuente(ev){
+  ev.preventDefault();
+  const t=document.getElementById('fT').value.trim(), o=document.getElementById('fO').value.trim(), c=document.getElementById('fC').value.trim();
+  if(!t||!c) return;
+  if(fEdit>=0){ S.fuentes[fEdit]={...S.fuentes[fEdit],t,o,c}; }
+  else S.fuentes.push({f:new Date().toISOString().slice(0,10),t,o,c});
+  persistir(); cancelarFuente(); renderFuentes();
+}
+function editarFuente(i){
+  fEdit=i; const x=S.fuentes[i];
+  document.getElementById('fT').value=x.t; document.getElementById('fO').value=x.o||''; document.getElementById('fC').value=x.c;
+  document.getElementById('fTitulo').textContent='EDITAR FUENTE';
+  document.getElementById('fCancel').classList.remove('hid');
+  document.getElementById('fT').focus();
+}
+function cancelarFuente(){
+  fEdit=-1;
+  document.getElementById('fT').value=''; document.getElementById('fO').value=''; document.getElementById('fC').value='';
+  document.getElementById('fTitulo').textContent='AGREGAR FUENTE';
+  document.getElementById('fCancel').classList.add('hid');
+}
+function borrarFuente(i){ if(confirm('¿Borrar "'+S.fuentes[i].t+'" de la biblioteca?')){ S.fuentes.splice(i,1); persistir(); if(fEdit===i) cancelarFuente(); renderFuentes(); } }
+function renderFuentes(){
+  const q=(document.getElementById('fBuscar').value||'').toLowerCase();
+  const box=document.getElementById('listaFuentes');
+  const lista=S.fuentes.map((x,i)=>({...x,i})).filter(x=>!q||(x.t+' '+(x.o||'')+' '+x.c).toLowerCase().includes(q));
+  if(!S.fuentes.length){ box.innerHTML='<p class="nota">La biblioteca está vacía. Cuando consigas una rutina que te guste, guardala acá con su origen.</p>'; return; }
+  if(!lista.length){ box.innerHTML='<p class="nota">Nada coincide con la búsqueda.</p>'; return; }
+  box.innerHTML=lista.slice().reverse().map(x=>
+    '<details class="fitem"><summary><span>'+escF(x.t)+'</span><small>'+(x.o?escF(x.o)+' · ':'')+x.f+'</small></summary>'+
+    '<pre>'+escF(x.c)+'</pre>'+
+    '<div class="acciones" style="margin:0"><button class="btn mini" onclick="editarFuente('+x.i+')">Editar</button><button class="btn mini" onclick="borrarFuente('+x.i+')" style="color:var(--r3)">Borrar</button></div></details>'
+  ).join('');
+}
 
 /* ============ CONFIG / RESPALDO ============ */
 function verTab(t){
-  ['R','T','C'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
+  ['R','T','F','C'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
   if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; }
+  if(t==='F') renderFuentes();
 }
 function guardarCfg(ev){
   ev.preventDefault();
