@@ -171,6 +171,11 @@
     <input id="fBuscar" placeholder="Buscar en la biblioteca..." oninput="renderFuentes()" style="margin-bottom:8px">
     <div id="listaFuentes"></div>
   </div>
+  <div class="card">
+    <h4 class="sec" style="margin-top:0">MIS BLOQUES DEL GENERADOR</h4>
+    <p class="nota">Los bloques que cargues acá <b>entran en la rotación del generador</b> junto a los de fábrica: aparecen en tus rutinas (marcados con ★), con los tiempos "incluido" calculados desde tu R1 y ajustados por semana y ciclo. Es la forma de convertir una fuente en variantes reales.</p>
+    <div id="zonaBloques"></div>
+  </div>
 </div>
 
 <div id="printArea"></div>
@@ -229,8 +234,8 @@
 const KEY='nadaplan_v1';
 let S = cargar();
 function cargar(){
-  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; return d; } }catch(e){}
-  return { cfg:{r1:120,min:90}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[] };
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; return d; } }catch(e){}
+  return { cfg:{r1:120,min:90}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
 }
 function persistir(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
 
@@ -422,6 +427,26 @@ const DIAS={1:'Aeróbico base',2:'Velocidad y técnica',3:'Resistencia específi
 function esTolerancia(p){ return p.ciclo%2===0 && p.sem===3 && p.dia===2; }
 function esTest(p){ return p.sem===1 && p.dia===3; }
 
+/* --- Bloques propios: conversor a formato del generador --- */
+function lineaAL(li){
+  const cons=escF(li.tx||'');
+  const rest=li.desc!=null?+li.desc:20;
+  if(li.r && li.r!=='SUAVE'){
+    const tx = li.r==='MAX' ? ['AL MÁXIMO', cons?' — '+cons:''] : [cons?cons+' · ':'', li.r];
+    return L(+li.reps,+li.dist,tx,so(+li.dist,li.r,rest,li.mat||'nado'));
+  }
+  return L(+li.reps,+li.dist,cons||'suave a gusto',null,{mat:li.mat||'suave',pausa:rest,r:'R1'});
+}
+function userPools(){
+  const u=S.bloquesUser||[];
+  const conv=b=>()=>({t:b.nombre+' ★', ls:b.lineas.map(lineaAL)});
+  return {
+    EC:u.filter(b=>b.sec==='ENTCAL').map(conv),
+    AC:u.filter(b=>b.sec==='ACT').map(conv),
+    FI:u.filter(b=>b.sec==='FINAL').map(conv),
+    TP:d=>u.filter(b=>b.sec==='TPPAL'&&(b.dias||[1,2,3]).includes(d)).map(conv)
+  };
+}
 function construir(p,minutos){
   CTX={sem:p.sem,ciclo:p.ciclo};
   const vKey=p.ciclo+'-'+p.sem+'-'+p.dia;
@@ -430,23 +455,26 @@ function construir(p,minutos){
   const presupuesto=minutos*60-150; // colchón para entrar/salir del agua
   const tol=esTolerancia(p), test=esTest(p), desc=p.sem===4;
 
-  const iEC=Math.floor(rand()*ENTCAL.length), iA=Math.floor(rand()*ACT.length), iF=Math.floor(rand()*FINAL.length);
-  let iM;
-  if(desc) iM=0;
-  else if(p.dia===3 && p.sem===3) iM=2;                    // simulacro de río fijo en el pico
-  else { const pool=(p.dia===1?D1:p.dia===2?D2:D3); iM=Math.floor(rand()*(p.dia===3?2:pool.length)); }
+  const UP=userPools();
+  const poolEC=ENTCAL.concat(UP.EC), poolAC=ACT.concat(UP.AC), poolFI=FINAL.concat(UP.FI);
+  const iEC=Math.floor(rand()*poolEC.length), iA=Math.floor(rand()*poolAC.length), iF=Math.floor(rand()*poolFI.length);
+  let mainSel=null;
+  if(!desc && !tol){
+    if(p.dia===3 && p.sem===3) mainSel=D3[2];               // simulacro de río fijo en el pico
+    else { const base=(p.dia===3?D3.slice(0,2):(p.dia===1?D1:D2)); const pool=base.concat(UP.TP(p.dia)); mainSel=pool[Math.floor(rand()*pool.length)]; }
+  }
 
   function arma(n,w,lean){
     const bloques=[];
-    bloques.push({sec:'ENT CAL', ...ENTCAL[iEC](w)});
-    if(!desc && !lean) bloques.push({sec:'ACT', ...ACT[iA]()});
+    bloques.push({sec:'ENT CAL', ...poolEC[iEC](w)});
+    if(!desc && !lean) bloques.push({sec:'ACT', ...poolAC[iA]()});
     let main;
     if(desc)      main=DESCARGA[p.dia](Math.max(1,n));
     else if(tol)  main=TOL(n);
-    else          main=(p.dia===1?D1:p.dia===2?D2:D3)[iM](Math.max(1,n));
+    else          main=mainSel(Math.max(1,n));
     if(test){ bloques.push({sec:'TPPAL · '+main.t, ls:main.ls, sub:main.sub}); bloques.push({sec:'TEST', ...TEST()}); }
     else bloques.push({sec:'TPPAL · '+main.t, ls:main.ls, sub:main.sub});
-    bloques.push({sec:'FINAL', ...(lean?FINAL[3](1):FINAL[iF](desc?1:w))});
+    bloques.push({sec:'FINAL', ...(lean?FINAL[3](1):poolFI[iF](desc?1:w))});
     let secs=0,m=0;
     bloques.forEach(b=>b.ls.forEach(l=>{secs+=l.secs;m+=l.m;}));
     return {bloques,secs,m};
@@ -655,11 +683,78 @@ function renderFuentes(){
   ).join('');
 }
 
+/* ============ EDITOR DE BLOQUES PROPIOS ============ */
+const MATOPS=[['nado','crol / nado'],['aletas','aletas'],['man','manoplas'],['pullman','pullboy y manoplas'],['pull','pullboy'],['tec','técnica'],['patada','patada'],['patAletas','patada con aletas'],['drill','drill'],['mixto','mixto'],['suave','suave']];
+const RITOPS=[['R1','R1 cómodo'],['R2','R2 carrera'],['R3','R3 umbral'],['MAX','AL MÁXIMO'],['SUAVE','suave / sin ritmo']];
+const SECOPS=[['ENTCAL','Entrada en calor'],['ACT','Activación'],['TPPAL','Trabajo principal'],['FINAL','Final']];
+let bDraft=null;
+function nuevoBloqueU(){ bDraft={nombre:'',sec:'TPPAL',dias:[1,2,3],lineas:[{reps:8,dist:200,r:'R2',mat:'nado',desc:20,tx:''}]}; renderBloques(); }
+function editarBloqueU(i){ bDraft=JSON.parse(JSON.stringify(S.bloquesUser[i])); bDraft._i=i; renderBloques(); }
+function cancelarBloqueU(){ bDraft=null; renderBloques(); }
+function borrarBloqueU(i){ if(confirm('¿Borrar el bloque "'+S.bloquesUser[i].nombre+'"? Sale de la rotación del generador.')){ S.bloquesUser.splice(i,1); persistir(); renderBloques(); render(); } }
+function updBL(i,campo,val){ bDraft.lineas[i][campo]=val; }
+function addLineaU(){ bDraft.lineas.push({reps:4,dist:50,r:'R2',mat:'nado',desc:20,tx:''}); renderBloques(); }
+function delLineaU(i){ bDraft.lineas.splice(i,1); if(!bDraft.lineas.length) addLineaU(); else renderBloques(); }
+function togDiaU(d,on){ bDraft.dias=bDraft.dias.filter(x=>x!==d); if(on) bDraft.dias.push(d); }
+function guardarBloqueU(){
+  if(!bDraft.nombre.trim()){ alert('Ponele un nombre al bloque.'); return; }
+  const ls=bDraft.lineas.map(l=>({reps:Math.max(1,Math.min(40,+l.reps||1)),dist:Math.max(25,Math.min(1500,+l.dist||50)),r:l.r,mat:l.mat,desc:Math.max(0,Math.min(240,+l.desc||0)),tx:(l.tx||'').trim()}));
+  const limpio={nombre:bDraft.nombre.trim(),sec:bDraft.sec,dias:bDraft.sec==='TPPAL'?(bDraft.dias.length?bDraft.dias.slice().sort():[1,2,3]):[1,2,3],lineas:ls};
+  if(bDraft._i!=null) S.bloquesUser[bDraft._i]=limpio; else S.bloquesUser.push(limpio);
+  persistir(); bDraft=null; renderBloques(); render();
+}
+function previewBloqueU(){
+  CTX={sem:S.pos.sem,ciclo:S.pos.ciclo};
+  let ls; try{ ls=bDraft.lineas.map(lineaAL); }catch(e){ return '<p class="nota">Completá las líneas para ver la vista previa.</p>'; }
+  const m=ls.reduce((a,l)=>a+l.m,0), secs=ls.reduce((a,l)=>a+l.secs,0);
+  let h='<h4 class="sec">VISTA PREVIA (con tu R1 y la posición actual del plan)</h4>';
+  ls.forEach(l=>{ h+='<div class="ln"><span class="rep">'+l.reps+'x'+l.dist+'</span><span class="tx">'+ritmoHtml(l.tx)+'</span>'+(l.so?'<span class="so">en '+fmt(l.so)+' incluido</span>':'')+'</div>'; });
+  h+='<p class="nota" style="font-family:var(--mono)">'+m.toLocaleString('es-AR')+' m · ~'+Math.round(secs/60)+' min</p>';
+  return h;
+}
+function renderBloques(){
+  const box=document.getElementById('zonaBloques'); if(!box) return;
+  if(!bDraft){
+    let h='';
+    if(!S.bloquesUser.length) h+='<p class="nota">Todavía no cargaste bloques. Un buen primero: "8x200 R2 con 15 segundos de descanso" — trabajo de umbral puro.</p>';
+    S.bloquesUser.forEach((b,i)=>{
+      const m=b.lineas.reduce((a,l)=>a+l.reps*l.dist,0);
+      const secN=(SECOPS.find(s=>s[0]===b.sec)||['',''])[1];
+      h+='<div class="fitem" style="display:block;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--panel2)">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline"><b>'+escF(b.nombre)+' ★</b>'+
+        '<small style="color:var(--muted);font-family:var(--mono)">'+secN+(b.sec==='TPPAL'?' · días '+b.dias.join(', '):'')+' · '+m.toLocaleString('es-AR')+' m</small></div>'+
+        '<div class="acciones" style="margin:8px 0 0"><button class="btn mini" onclick="editarBloqueU('+i+')">Editar</button><button class="btn mini" onclick="borrarBloqueU('+i+')" style="color:var(--r3)">Borrar</button></div></div>';
+    });
+    h+='<div class="acciones"><button class="btn pri" onclick="nuevoBloqueU()">+ Nuevo bloque</button></div>';
+    box.innerHTML=h; return;
+  }
+  let h='<label class="f">Nombre del bloque<input value="'+escF(bDraft.nombre)+'" oninput="bDraft.nombre=this.value" placeholder="Ej: Umbral 8x200"></label>';
+  h+='<div class="testf" style="grid-template-columns:1fr 1fr;margin-top:8px"><label class="f">Sección<select onchange="bDraft.sec=this.value;renderBloques()">'+SECOPS.map(s=>'<option value="'+s[0]+'"'+(s[0]===bDraft.sec?' selected':'')+'>'+s[1]+'</option>').join('')+'</select></label>';
+  if(bDraft.sec==='TPPAL'){
+    h+='<div class="f"><span>Aplica a los días</span><div class="fila" style="margin-top:4px">'+[1,2,3].map(d=>'<label style="display:flex;gap:5px;align-items:center;font-size:13px;color:var(--ink)"><input type="checkbox" style="width:auto" '+(bDraft.dias.includes(d)?'checked':'')+' onchange="togDiaU('+d+',this.checked)"> '+d+' ('+['aeróbico','velocidad','resistencia'][d-1]+')</label>').join('')+'</div></div>';
+  }
+  h+='</div>';
+  bDraft.lineas.forEach((l,i)=>{
+    h+='<div style="border:1px dashed var(--line);border-radius:10px;padding:10px;margin-top:10px">'+
+      '<div class="testf" style="grid-template-columns:repeat(3,1fr)">'+
+      '<label class="f">Repeticiones<input type="number" min="1" max="40" value="'+l.reps+'" oninput="updBL('+i+',\'reps\',this.value)"></label>'+
+      '<label class="f">Distancia (m)<input type="number" min="25" max="1500" step="25" value="'+l.dist+'" oninput="updBL('+i+',\'dist\',this.value)"></label>'+
+      '<label class="f">Descanso (seg)<input type="number" min="0" max="240" step="5" value="'+l.desc+'" oninput="updBL('+i+',\'desc\',this.value)"></label>'+
+      '<label class="f">Ritmo<select onchange="updBL('+i+',\'r\',this.value)">'+RITOPS.map(r=>'<option value="'+r[0]+'"'+(r[0]===l.r?' selected':'')+'>'+r[1]+'</option>').join('')+'</select></label>'+
+      '<label class="f">Material<select onchange="updBL('+i+',\'mat\',this.value)">'+MATOPS.map(m=>'<option value="'+m[0]+'"'+(m[0]===l.mat?' selected':'')+'>'+m[1]+'</option>').join('')+'</select></label>'+
+      '<label class="f">Consigna (opcional)<input value="'+escF(l.tx)+'" oninput="updBL('+i+',\'tx\',this.value)" placeholder="Ej: negativo, respirar cada 3"></label>'+
+      '</div><div class="acciones" style="margin:8px 0 0"><button class="btn mini" onclick="delLineaU('+i+')" style="color:var(--r3)">✕ Quitar línea</button></div></div>';
+  });
+  h+='<div class="acciones" style="margin-top:10px"><button class="btn" onclick="addLineaU()">+ Línea</button><button class="btn" onclick="renderBloques()">↻ Vista previa</button><button class="btn pri" onclick="guardarBloqueU()">Guardar bloque</button><button class="btn" onclick="cancelarBloqueU()">Cancelar</button></div>';
+  h+='<div id="pvBloque">'+previewBloqueU()+'</div>';
+  box.innerHTML=h;
+}
+
 /* ============ CONFIG / RESPALDO ============ */
 function verTab(t){
   ['R','T','F','C'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
   if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; }
-  if(t==='F') renderFuentes();
+  if(t==='F'){ renderFuentes(); renderBloques(); }
 }
 function guardarCfg(ev){
   ev.preventDefault();
