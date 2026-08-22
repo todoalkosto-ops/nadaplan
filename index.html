@@ -206,9 +206,10 @@
     <form class="testf" onsubmit="guardarCfg(event)">
       <label class="f">R1 cada 100 m (mm:ss)<input id="cR1" pattern="\d{1,2}:\d{2}"></label>
       <label class="f">Minutos por sesión<input id="cMin" type="number" min="40" max="150"></label>
+      <label class="f">Peso corporal (kg)<input id="cPeso" type="number" min="30" max="200" step="0.5"></label>
       <button class="btn pri" type="submit">Guardar</button>
     </form>
-    <p class="nota">De tu R1 salen R2 (ritmo de carrera, ~8&nbsp;% más rápido) y R3 (umbral, ~15&nbsp;% más rápido), y todos los tiempos "incluido". El tiempo disponible define cuántos metros entran en cada sesión: la app arma la rutina más larga que quepa.</p>
+    <p class="nota">De tu R1 salen R2 (~8&nbsp;% más rápido) y R3 (~15&nbsp;% más rápido). El tiempo disponible define cuántos metros entran. El peso se usa para estimar las calorías de cada sesión (~0,25 kcal/m ajustado a tu peso).</p>
     <h4 class="sec">POSICIÓN EN EL PLAN</h4>
     <div class="acciones">
       <button class="btn" onclick="mover(-1)">‹ Sesión anterior</button>
@@ -224,6 +225,7 @@
       <button class="btn" onclick="borrarTodo()" style="color:var(--r3)">Borrar todo</button>
     </div>
     <p class="nota">Los datos viven en este navegador (localStorage). Exportá un respaldo cada tanto, igual que hacés con tus otros tableros.</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v2.5 — navegación rápida, peso y kcal estimadas</p>
   </div>
 </div>
 
@@ -234,8 +236,8 @@
 const KEY='nadaplan_v1';
 let S = cargar();
 function cargar(){
-  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; return d; } }catch(e){}
-  return { cfg:{r1:120,min:90}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; if(!d.cfg.peso) d.cfg.peso=0; return d; } }catch(e){}
+  return { cfg:{r1:120,min:90,peso:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
 }
 function persistir(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
 
@@ -517,9 +519,11 @@ function render(){
 
   const ses=construir(p,S.cfg.min);
   const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  let h='<div class="card">';
+  const kcalEst=S.cfg.peso? Math.round(ses.m * 0.25 * (S.cfg.peso/72)) : null;
+  let h='<div class="acciones" style="margin-bottom:10px"><button class="btn mini" onclick="mover(-1)">‹ Anterior</button><span class="ses-meta" style="text-align:center;flex:1">Ciclo '+p.ciclo+' · Sem '+p.sem+' · Día '+p.dia+'/3</span><button class="btn mini" onclick="mover(1)">Siguiente ›</button></div>';
+  h+='<div class="card">';
   h+='<div class="ses-head"><h2>'+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</h2>';
-  h+='<span class="ses-meta">Sesión <b>N° '+(S.sesiones.length+1)+'</b> · '+hoy+' · <b>'+ses.m.toLocaleString('es-AR')+' m</b> · ~'+Math.round(ses.secs/60)+' min de '+S.cfg.min+' disponibles</span></div>';
+  h+='<span class="ses-meta">Sesión <b>N° '+(S.sesiones.length+1)+'</b> · '+hoy+' · <b>'+ses.m.toLocaleString('es-AR')+' m</b> · ~'+Math.round(ses.secs/60)+' min'+(kcalEst?' · <b style="color:var(--r2)">~'+kcalEst.toLocaleString('es-AR')+' kcal</b>':'')+'</span></div>';
   if(ses.recortada && !ses.excedido) h+='<div class="aviso">Versión recortada para que entre en '+S.cfg.min+' min: sin activación y con final mínimo. Con 70–75 min tendrías la sesión completa.</div>';
   if(ses.excedido) h+='<div class="aviso rojo">Ni la versión recortada entra en '+S.cfg.min+' min: te va a llevar ~'+Math.round(ses.secs/60)+' min. Cortá donde puedas o sumá minutos en Ajustes.</div>';
   if(ses.test) h+='<div class="aviso">Hoy hay <b>TEST</b>: cronometrá los 3x200 del bloque final del TPPAL y cargalos en "Tests y progreso".</div>';
@@ -584,11 +588,14 @@ function aplicarR1(s){ S.cfg.r1=s; persistir(); render(); document.getElementByI
 function renderTests(){
   const km=(S.sesiones.reduce((a,s)=>a+s.m,0)/1000);
   const mejor=S.tests.length?Math.min(...S.tests.map(t=>t.pace)):null;
+  const kcalFactor=S.cfg.peso? 0.25*(S.cfg.peso/72) : 0.25;
+  const kcalTotal=Math.round((S.sesiones.reduce((a,s)=>a+s.m,0))*kcalFactor/1000);
   document.getElementById('kpis').innerHTML=
     '<div class="kpi"><div class="v">'+S.sesiones.length+'</div><div class="l">sesiones completadas</div></div>'+
     '<div class="kpi"><div class="v">'+km.toFixed(1)+' km</div><div class="l">nadados en el plan</div></div>'+
     '<div class="kpi"><div class="v">'+(mejor?fmt(mejor):'—')+'</div><div class="l">mejor ritmo de test /100</div></div>'+
-    '<div class="kpi"><div class="v">'+fmt(S.cfg.r1)+'</div><div class="l">R1 vigente /100</div></div>';
+    '<div class="kpi"><div class="v">'+fmt(S.cfg.r1)+'</div><div class="l">R1 vigente /100</div></div>'+
+    (S.cfg.peso?'<div class="kpi"><div class="v">'+kcalTotal.toLocaleString('es-AR')+' k</div><div class="l">kcal quemadas (estimadas)</div></div>':'');
   // tabla
   let th='<tr><th>Fecha</th><th>200 nº1</th><th>200 nº2</th><th>200 nº3</th><th>Ritmo /100</th></tr>';
   S.tests.slice().reverse().forEach(t=>{
@@ -627,7 +634,7 @@ function imprimirSesion(){
   const fase=FASES[p.sem-1];
   const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   let h='<div class="ph">NadaPlan — '+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</div>';
-  h+='<div class="pm">Sesión N° '+(S.sesiones.length+1)+' · '+hoy+' · Ciclo '+p.ciclo+' · Semana '+p.sem+' ('+fase+') · Día '+p.dia+'/3 · '+ses.m.toLocaleString('es-AR')+' m · ~'+Math.round(ses.secs/60)+' min</div>';
+  h+='<div class="pm">Sesión N° '+(S.sesiones.length+1)+' · '+hoy+' · Ciclo '+p.ciclo+' · Semana '+p.sem+' ('+fase+') · Día '+p.dia+'/3 · '+ses.m.toLocaleString('es-AR')+' m · ~'+Math.round(ses.secs/60)+' min'+(S.cfg.peso?' · ~'+Math.round(ses.m*0.25*(S.cfg.peso/72))+' kcal':'')+'</div>';
   if(ses.test) h+='<div class="pav">TEST: cronometrar los 3x200 del final del TPPAL y cargarlos en la app.</div>';
   if(ses.tol) h+='<div class="pav">Sesión esporádica de tolerancia: poco volumen, máxima intensidad, descansos largos.</div>';
   if(ses.desc) h+='<div class="pav">Semana de descarga: todo cómodo, sin forzar.</div>';
@@ -753,13 +760,13 @@ function renderBloques(){
 /* ============ CONFIG / RESPALDO ============ */
 function verTab(t){
   ['R','T','F','C'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
-  if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; }
+  if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; document.getElementById('cPeso').value=S.cfg.peso||''; }
   if(t==='F'){ renderFuentes(); renderBloques(); }
 }
 function guardarCfg(ev){
   ev.preventDefault();
-  const r=parse(document.getElementById('cR1').value), m=+document.getElementById('cMin').value;
-  if(r) S.cfg.r1=r; if(m>=40&&m<=150) S.cfg.min=m;
+  const r=parse(document.getElementById('cR1').value), m=+document.getElementById('cMin').value, p=+document.getElementById('cPeso').value;
+  if(r) S.cfg.r1=r; if(m>=40&&m<=150) S.cfg.min=m; if(p>=30&&p<=200) S.cfg.peso=p;
   persistir(); render(); verTab('R');
 }
 function exportar(){
