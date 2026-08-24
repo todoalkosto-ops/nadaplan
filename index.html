@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>NadaPlan — Generador de rutinas 10K</title>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --bg:#071720; --panel:#0d2430; --panel2:#10303f; --line:#1c4152;
@@ -45,6 +48,10 @@
   .aviso{border-left:3px solid var(--r2);background:rgba(255,194,75,.08);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13.5px;margin:10px 0;color:#ffe1a6}
   .aviso.rojo{border-color:var(--max);background:rgba(255,77,66,.08);color:#ffb3ad}
   .aviso.verde{border-color:var(--ok);background:rgba(87,217,138,.08);color:#a9edc4}
+  .aviso.hecha{border-color:var(--ok);background:rgba(87,217,138,.12);color:#a9edc4;font-weight:700;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .aviso.hecha .det{font-weight:400;font-size:12.5px;font-family:var(--mono)}
+  .completar-form{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:8px}
+  .completar-form .testf{grid-template-columns:1fr 1fr}
   section.bloq{margin-top:16px}
   section.bloq h3{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;letter-spacing:1.5px;color:var(--aqua);border-bottom:1px dashed var(--line);padding-bottom:5px;margin-bottom:8px}
   section.bloq h3 small{font-family:var(--mono);color:var(--muted);letter-spacing:0;font-weight:400}
@@ -77,6 +84,20 @@
   .hid{display:none}
   h4.sec{font-size:14px;letter-spacing:1px;color:var(--aqua);margin:18px 0 8px}
   p.nota{font-size:13.5px;color:var(--muted);margin:6px 0}
+  /* ====== LOGIN ====== */
+  #loginScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;text-align:center}
+  #loginScreen h2{font-size:22px;font-weight:800;margin-bottom:4px}
+  #loginScreen h2 span{color:var(--aqua)}
+  #loginScreen p{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .loginBox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;width:100%;max-width:340px}
+  .loginBox label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:10px;text-align:left}
+  .loginBox .btn{width:100%;margin-top:6px}
+  .loginBox .err{color:var(--r3);font-size:13px;margin-top:8px;min-height:20px}
+  .loginBox .alt{color:var(--muted);font-size:13px;margin-top:14px}
+  .loginBox .alt a{color:var(--aqua);cursor:pointer;text-decoration:underline}
+  .userBar{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-bottom:-8px;font-size:12.5px;color:var(--muted)}
+  .userBar b{color:var(--ink)}
+  .userBar button{background:none;border:none;color:var(--aqua);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
   .twrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   /* ====== MÓVIL ====== */
   @media(max-width:600px){
@@ -141,6 +162,23 @@
 </head>
 <body>
 <div class="wrap">
+<div id="loginScreen">
+  <h2>Nada<span>Plan</span></h2>
+  <p>Generador de rutinas para aguas abiertas 10K</p>
+  <div class="loginBox">
+    <div id="loginForm">
+      <label>Usuario<input id="authUser" placeholder="Ej: christian" autocapitalize="none" autocomplete="username"></label>
+      <label>Contraseña<input id="authPass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="current-password"></label>
+      <button class="btn pri" onclick="doLogin()">Ingresar</button>
+      <button class="btn" onclick="doRegister()">Crear cuenta</button>
+      <div class="err" id="authErr"></div>
+      <p class="alt">Cada persona crea su usuario y tiene sus propios datos.</p>
+    </div>
+  </div>
+</div>
+
+<div id="appMain" style="display:none">
+<div class="userBar" id="userBar"></div>
 <header>
   <h1>Nada<span>Plan</span> · 10K aguas abiertas</h1>
   <p>Generador de rutinas — estructura ENT CAL · ACT · TPPAL · FINAL, ciclos de 4 semanas con progresión</p>
@@ -224,22 +262,128 @@
       <input type="file" id="imp" accept=".json" class="hid" onchange="importar(event)">
       <button class="btn" onclick="borrarTodo()" style="color:var(--r3)">Borrar todo</button>
     </div>
-    <p class="nota">Los datos viven en este navegador (localStorage). Exportá un respaldo cada tanto, igual que hacés con tus otros tableros.</p>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v2.5 — navegación rápida, peso y kcal estimadas</p>
+    <p class="nota">Los datos se guardan automáticamente en Firebase (nube). El JSON de exportar/importar sirve como respaldo adicional.</p>
+    <h4 class="sec">CONFIGURAR FIREBASE (una sola vez)</h4>
+    <details><summary style="cursor:pointer;color:var(--aqua);font-size:13px;font-weight:700">Ver instrucciones de setup ▸</summary>
+    <div class="nota" style="margin-top:8px;line-height:1.7">
+    1. Entrá a <b>console.firebase.google.com</b> y creá un proyecto nuevo (ej: "nadaplan")<br>
+    2. En el menú izquierdo: <b>Authentication → Get started → Sign-in method → Email/Password → Habilitar → Guardar</b><br>
+    3. En el menú izquierdo: <b>Firestore Database → Create database → Start in production mode → Elegir ubicación (la que quieras) → Create</b><br>
+    4. En Firestore → <b>Rules</b>, reemplazá todo por esto y publicá:<br>
+    <code style="display:block;background:var(--bg);padding:8px;border-radius:6px;font-size:12px;margin:4px 0;white-space:pre">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null
+                         && request.auth.uid == userId;
+    }
+  }
+}</code>
+    5. En <b>Project settings</b> (engranaje arriba a la izquierda) → <b>Your apps → Web (ícono &lt;/&gt;)</b> → Poné un nombre → <b>Register app</b><br>
+    6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
+    7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
+    </div></details>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.0.1 — fix login/logout toggle</p>
   </div>
 </div>
 
-</div>
+</div><!-- /appMain -->
+</div><!-- /wrap -->
 <script>
 'use strict';
+/* ================= FIREBASE ================= */
+/*
+ * INSTRUCCIONES: reemplazá el bloque firebaseConfig con los datos
+ * de tu proyecto de Firebase (ver guía en Ajustes de la app).
+ */
+const firebaseConfig = {
+  apiKey: "AIzaSyC3Ppp1pi85QDX9U5wwIe6Rhr8AVJ98ifc",
+  authDomain: "entrenamiento-natacion-841b0.firebaseapp.com",
+  projectId: "entrenamiento-natacion-841b0",
+  storageBucket: "entrenamiento-natacion-841b0.firebasestorage.app",
+  messagingSenderId: "888490958045",
+  appId: "1:888490958045:web:8755de4af698c31df68f34"
+};
+let fbOk=false, auth=null, db=null, currentUser=null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  auth=firebase.auth();
+  db=firebase.firestore();
+  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+  fbOk=true;
+}catch(e){ console.warn('Firebase no configurado:',e.message); }
+
+const DOMAIN='@nadaplan.app'; // sufijo interno para convertir usuario → email
+function userEmail(u){ return u.trim().toLowerCase().replace(/\s/g,'_')+DOMAIN; }
+function userName(email){ return email?email.replace(DOMAIN,'').replace(/_/g,' '):''; }
+
+function showLogin(){ document.getElementById('loginScreen').style.display=''; document.getElementById('appMain').style.display='none'; }
+function showApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appMain').style.display='';
+  document.getElementById('userBar').innerHTML=currentUser?
+    'Sesión de <b>'+userName(currentUser.email)+'</b> <button onclick="doLogout()">Cerrar sesión</button>':'';
+}
+async function doLogin(){
+  const u=document.getElementById('authUser').value.trim(), p=document.getElementById('authPass').value;
+  if(!u||!p){showErr('Completá usuario y contraseña.');return;}
+  showErr('Ingresando...');
+  try{ await auth.signInWithEmailAndPassword(userEmail(u),p); }
+  catch(e){ showErr(e.code==='auth/user-not-found'?'Usuario no encontrado. ¿Querés crear cuenta?':e.code==='auth/wrong-password'||e.code==='auth/invalid-credential'?'Contraseña incorrecta.':'Error: '+e.message); }
+}
+async function doRegister(){
+  const u=document.getElementById('authUser').value.trim(), p=document.getElementById('authPass').value;
+  if(!u||!p){showErr('Completá usuario y contraseña.');return;}
+  if(p.length<6){showErr('La contraseña tiene que tener al menos 6 caracteres.');return;}
+  showErr('Creando cuenta...');
+  try{ await auth.createUserWithEmailAndPassword(userEmail(u),p); }
+  catch(e){ showErr(e.code==='auth/email-already-in-use'?'Ese usuario ya existe. Probá ingresar.':'Error: '+e.message); }
+}
+function doLogout(){ auth.signOut(); }
+function showErr(m){ const el=document.getElementById('authErr'); if(el) el.textContent=m; }
+
+/* ================= FIRESTORE SYNC ================= */
+async function cargarDesdeNube(){
+  if(!fbOk||!currentUser) return null;
+  try{
+    const doc=await db.collection('users').doc(currentUser.uid).get();
+    return doc.exists?doc.data():null;
+  }catch(e){ console.warn('Error cargando de Firestore:',e); return null; }
+}
+function guardarEnNube(){
+  if(!fbOk||!currentUser) return;
+  try{ db.collection('users').doc(currentUser.uid).set(JSON.parse(JSON.stringify(S))); }
+  catch(e){ console.warn('Error guardando en Firestore:',e); }
+}
+
+if(fbOk){
+  auth.onAuthStateChanged(async user=>{
+    currentUser=user;
+    if(user){
+      const nube=await cargarDesdeNube();
+      if(nube&&nube.cfg) S=nube;
+      else { S=cargarLocal(); guardarEnNube(); }
+      if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+      showApp(); render();
+    } else { showLogin(); }
+  });
+} else {
+  // sin Firebase: modo local (compatible con versión anterior)
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appMain').style.display='';
+}
 /* ============ ESTADO ============ */
 const KEY='nadaplan_v1';
-let S = cargar();
-function cargar(){
+let S = cargarLocal();
+function cargarLocal(){
   try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; if(!d.cfg.peso) d.cfg.peso=0; return d; } }catch(e){}
   return { cfg:{r1:120,min:90,peso:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
 }
-function persistir(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
+function cargar(){ return cargarLocal(); }
+function persistir(){
+  try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){}
+  guardarEnNube();
+}
 
 /* ============ TIEMPOS ============ */
 const fmt = s => { s=Math.round(s); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
@@ -520,19 +664,28 @@ function render(){
   const ses=construir(p,S.cfg.min);
   const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const kcalEst=S.cfg.peso? Math.round(ses.m * 0.25 * (S.cfg.peso/72)) : null;
+  const iHecha=buscarHecha(p);
+  const hecha=iHecha>=0?S.sesiones[iHecha]:null;
+  // bloques a renderizar: snapshot si fue hecha, o generados si pendiente
+  const bloques=hecha&&hecha.snap?hecha.snap:ses.bloques;
+  const metros=hecha?hecha.m:ses.m;
+  const minEst=hecha?hecha.min:Math.round(ses.secs/60);
+  const kcal=hecha?hecha.kcal:kcalEst;
+  const nSes=hecha?S.sesiones.indexOf(hecha)+1:S.sesiones.length+1;
   let h='<div class="acciones" style="margin-bottom:10px"><button class="btn mini" onclick="mover(-1)">‹ Anterior</button><span class="ses-meta" style="text-align:center;flex:1">Ciclo '+p.ciclo+' · Sem '+p.sem+' · Día '+p.dia+'/3</span><button class="btn mini" onclick="mover(1)">Siguiente ›</button></div>';
   h+='<div class="card">';
+  if(hecha) h+='<div class="aviso hecha"><span>✓ SESIÓN COMPLETADA</span><span class="det">'+hecha.f+(hecha.h?' '+hecha.h:'')+' · R1 '+fmt(hecha.r1)+'/100</span><button class="btn mini" onclick="reabrirSesion({ciclo:'+p.ciclo+',sem:'+p.sem+',dia:'+p.dia+'})">Reabrir</button></div>';
   h+='<div class="ses-head"><h2>'+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</h2>';
-  h+='<span class="ses-meta">Sesión <b>N° '+(S.sesiones.length+1)+'</b> · '+hoy+' · <b>'+ses.m.toLocaleString('es-AR')+' m</b> · ~'+Math.round(ses.secs/60)+' min'+(kcalEst?' · <b style="color:var(--r2)">~'+kcalEst.toLocaleString('es-AR')+' kcal</b>':'')+'</span></div>';
-  if(ses.recortada && !ses.excedido) h+='<div class="aviso">Versión recortada para que entre en '+S.cfg.min+' min: sin activación y con final mínimo. Con 70–75 min tendrías la sesión completa.</div>';
-  if(ses.excedido) h+='<div class="aviso rojo">Ni la versión recortada entra en '+S.cfg.min+' min: te va a llevar ~'+Math.round(ses.secs/60)+' min. Cortá donde puedas o sumá minutos en Ajustes.</div>';
+  h+='<span class="ses-meta">Sesión <b>N° '+nSes+'</b> · '+(hecha?hecha.f:hoy)+' · <b>'+metros.toLocaleString('es-AR')+' m</b> · ~'+minEst+' min'+(kcal?' · <b style="color:var(--r2)">~'+kcal.toLocaleString('es-AR')+' kcal</b>':'')+'</span></div>';
+  if(!hecha && ses.recortada && !ses.excedido) h+='<div class="aviso">Versión recortada para que entre en '+S.cfg.min+' min: sin activación y con final mínimo. Con 70–75 min tendrías la sesión completa.</div>';
+  if(!hecha && ses.excedido) h+='<div class="aviso rojo">Ni la versión recortada entra en '+S.cfg.min+' min: te va a llevar ~'+Math.round(ses.secs/60)+' min. Cortá donde puedas o sumá minutos en Ajustes.</div>';
   if(ses.test) h+='<div class="aviso">Hoy hay <b>TEST</b>: cronometrá los 3x200 del bloque final del TPPAL y cargalos en "Tests y progreso".</div>';
   if(ses.tol) h+='<div class="aviso rojo">Sesión esporádica de <b>tolerancia</b>: poco volumen, máxima intensidad, descansos largos. No la repitas por tu cuenta — vuelve recién en dos ciclos.</div>';
   if(ses.desc) h+='<div class="aviso verde">Semana de <b>descarga</b>: todo cómodo, sin forzar. Acá se asimila la carga de las tres semanas anteriores.</div>';
   const c=p.ciclo, dens=Math.round((1-fDesc(p.sem,c)/([1,.95,.9,1.25][p.sem-1]))*100);
   if(c>1 && p.sem<4) h+='<div class="aviso">Ciclo '+c+': descansos ~'+dens+'&nbsp;% más apretados que en el ciclo 1, con tus mismos ritmos. Si actualizaste el R1 con un test, la exigencia ya está incorporada en los tiempos.</div>';
 
-  ses.bloques.forEach(b=>{
+  bloques.forEach(b=>{
     const mB=b.ls.reduce((a,l)=>a+l.m,0);
     h+='<section class="bloq"><h3>'+b.sec+'<small>'+(mB?mB+' m':'')+'</small></h3>';
     if(b.sub) h+='<p class="nota">'+b.sub+'</p>';
@@ -543,8 +696,22 @@ function render(){
     });
     h+='</section>';
   });
-  h+='<div class="leyenda"><span><span class="r-R1">R1</span> '+fmt(ritmo100('R1'))+'/100 cómodo</span><span><span class="r-R2">R2</span> '+fmt(ritmo100('R2'))+'/100 carrera</span><span><span class="r-R3">R3</span> '+fmt(ritmo100('R3'))+'/100 umbral</span><span>"incluido" = nado + descanso</span></div>';
-  h+='</div><div class="acciones"><button class="btn" onclick="otraVariante()">↻ Otra variante</button><button class="btn" onclick="imprimirSesion()">🖨 Imprimir / PDF</button><button class="btn pri" onclick="completar()">Sesión completada ✓</button><span class="navsem"><button class="btn mini" onclick="mover(-1)">‹</button><button class="btn mini" onclick="mover(1)">›</button></span></div>';
+  if(hecha&&hecha.snap) h+='<div class="leyenda"><span>Tiempos congelados al R1 de '+fmt(hecha.r1)+'/100 con el que se hizo la sesión</span></div>';
+  else h+='<div class="leyenda"><span><span class="r-R1">R1</span> '+fmt(ritmo100('R1'))+'/100 cómodo</span><span><span class="r-R2">R2</span> '+fmt(ritmo100('R2'))+'/100 carrera</span><span><span class="r-R3">R3</span> '+fmt(ritmo100('R3'))+'/100 umbral</span><span>"incluido" = nado + descanso</span></div>';
+  h+='</div>';
+  // acciones
+  if(hecha){
+    h+='<div class="acciones"><button class="btn" onclick="imprimirSesion()">🖨 Imprimir / PDF</button><span class="navsem"><button class="btn mini" onclick="mover(-1)">‹</button><button class="btn mini" onclick="mover(1)">›</button></span></div>';
+  } else {
+    h+='<div class="acciones"><button class="btn" onclick="otraVariante()">↻ Otra variante</button><button class="btn" onclick="imprimirSesion()">🖨 Imprimir / PDF</button><button class="btn pri" onclick="toggleCompletar()">Sesión completada ✓</button><span class="navsem"><button class="btn mini" onclick="mover(-1)">‹</button><button class="btn mini" onclick="mover(1)">›</button></span></div>';
+    if(mostrarFormCompletar){
+      const ahora=new Date();
+      h+='<div class="completar-form"><p class="nota" style="margin:0 0 8px">¿Cuándo hiciste esta sesión?</p><form class="testf" onsubmit="completar();return false;">'+
+        '<label class="f">Fecha<input type="date" id="compFecha" required value="'+ahora.toISOString().slice(0,10)+'"></label>'+
+        '<label class="f">Hora (opcional)<input type="time" id="compHora" value="'+ahora.toTimeString().slice(0,5)+'"></label>'+
+        '<button class="btn pri" type="submit">Confirmar ✓</button><button class="btn" type="button" onclick="mostrarFormCompletar=false;render()">Cancelar</button></form></div>';
+    }
+  }
   document.getElementById('vR').innerHTML=h;
   renderTests();
   renderSesiones();
@@ -558,10 +725,29 @@ function mover(d){
   if(sem>4){sem=1;ciclo++;} if(sem<1){ if(ciclo>1){ciclo--;sem=4;} else {sem=1;dia=1;} }
   S.pos={ciclo,sem,dia}; persistir(); render();
 }
+function buscarHecha(p){ return S.sesiones.findIndex(s=>s.c===p.ciclo&&s.s===p.sem&&s.d===p.dia); }
+let mostrarFormCompletar=false;
+function toggleCompletar(){ mostrarFormCompletar=!mostrarFormCompletar; render(); }
 function completar(){
+  const fVal=document.getElementById('compFecha').value;
+  const hVal=document.getElementById('compHora').value;
+  if(!fVal){ alert('Cargá la fecha en que hiciste la sesión.'); return; }
   const ses=construir(S.pos,S.cfg.min);
-  S.sesiones.push({f:new Date().toISOString().slice(0,10), c:S.pos.ciclo, s:S.pos.sem, d:S.pos.dia, m:ses.m});
-  mover(1);
+  // snapshot: guardar los bloques renderizados con los tiempos actuales
+  const snap=ses.bloques.map(b=>({sec:b.sec,sub:b.sub||null,ls:b.ls.map(l=>({reps:l.reps,dist:l.dist,tx:typeof l.tx==='string'?l.tx:(Array.isArray(l.tx)?l.tx.join(''):String(l.tx)),so:l.so,m:l.m,sub:l.sub||null,pausaLibre:l.pausaLibre||null}))}));
+  const kcalEst=S.cfg.peso? Math.round(ses.m * 0.25 * (S.cfg.peso/72)) : null;
+  S.sesiones.push({
+    f:fVal, h:hVal||'', c:S.pos.ciclo, s:S.pos.sem, d:S.pos.dia, m:ses.m,
+    min:Math.round(ses.secs/60), kcal:kcalEst, r1:S.cfg.r1,
+    snap:snap
+  });
+  mostrarFormCompletar=false;
+  persistir(); mover(1);
+}
+function reabrirSesion(p){
+  if(!confirm('¿Reabrir esta sesión? Se borra el registro de que fue completada.')) return;
+  const i=buscarHecha(p);
+  if(i>=0){ S.sesiones.splice(i,1); persistir(); render(); }
 }
 function reiniciarCiclo(){ if(confirm('¿Volver a Semana 1 · Sesión 1 del ciclo actual?')){ S.pos.sem=1;S.pos.dia=1;persistir();render(); } }
 
@@ -619,9 +805,9 @@ function renderTests(){
 function renderSesiones(){
   const box=document.getElementById('tablaSesiones'); if(!box) return;
   if(!S.sesiones.length){ box.innerHTML=''; return; }
-  let th='<tr><th>N°</th><th>Fecha</th><th>Ciclo</th><th>Sem</th><th>Día</th><th>Metros</th></tr>';
+  let th='<tr><th>N°</th><th>Fecha</th><th>Ciclo</th><th>Sem</th><th>Día</th><th>Metros</th><th>R1</th></tr>';
   S.sesiones.map((s,i)=>({...s,n:i+1})).slice().reverse().forEach(s=>{
-    th+='<tr><td>'+s.n+'</td><td>'+s.f+'</td><td>'+s.c+'</td><td>'+s.s+' ('+FASES[s.s-1]+')</td><td>'+s.d+'/3</td><td>'+s.m.toLocaleString('es-AR')+'</td></tr>';
+    th+='<tr><td>'+s.n+'</td><td>'+s.f+(s.h?' '+s.h:'')+'</td><td>'+s.c+'</td><td>'+s.s+' ('+FASES[s.s-1]+')</td><td>'+s.d+'/3</td><td>'+s.m.toLocaleString('es-AR')+'</td><td>'+(s.r1?fmt(s.r1):'—')+'</td></tr>';
   });
   box.innerHTML=th;
 }
@@ -777,13 +963,19 @@ function exportar(){
 function importar(ev){
   const f=ev.target.files[0]; if(!f) return;
   const r=new FileReader();
-  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.cfg&&d.pos){ S=d; persistir(); render(); alert('Datos importados.'); } else alert('El archivo no tiene el formato de NadaPlan.'); }catch(e){ alert('No se pudo leer el archivo.'); } };
+  r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.cfg&&d.pos){ S=d; persistir(); render(); alert('Datos importados y sincronizados.'); } else alert('El archivo no tiene el formato de NadaPlan.'); }catch(e){ alert('No se pudo leer el archivo.'); } };
   r.readAsText(f);
 }
-function borrarTodo(){ if(confirm('Se borra TODO: configuración, historial y tests. ¿Seguro?')){ localStorage.removeItem(KEY); S=cargar(); render(); } }
+function borrarTodo(){
+  if(confirm('Se borra TODO: configuración, historial y tests. ¿Seguro?')){
+    localStorage.removeItem(KEY); S=cargarLocal();
+    if(fbOk&&currentUser) db.collection('users').doc(currentUser.uid).delete().catch(()=>{});
+    render();
+  }
+}
 
 document.getElementById('tFecha').value=new Date().toISOString().slice(0,10);
-render();
+if(!fbOk) render(); // si Firebase no está configurado, arranca directo en modo local
 </script>
 </body>
 </html>
