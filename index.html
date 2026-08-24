@@ -191,6 +191,7 @@
   <button id="tabT" onclick="verTab('T')">Tests<span class="lg"> y progreso</span></button>
   <button id="tabF" onclick="verTab('F')">Fuentes</button>
   <button id="tabC" onclick="verTab('C')">Ajustes</button>
+  <button id="tabAdmin" onclick="verTab('Admin')" style="display:none;color:var(--r3)">Admin</button>
 </nav>
 
 <div id="vR"></div>
@@ -213,6 +214,15 @@
     <h4 class="sec" style="margin-top:0">MIS BLOQUES DEL GENERADOR</h4>
     <p class="nota">Los bloques que cargues acá <b>entran en la rotación del generador</b> junto a los de fábrica: aparecen en tus rutinas (marcados con ★), con los tiempos "incluido" calculados desde tu R1 y ajustados por semana y ciclo. Es la forma de convertir una fuente en variantes reales.</p>
     <div id="zonaBloques"></div>
+  </div>
+</div>
+
+<div id="vAdmin" class="hid">
+  <div class="card">
+    <h4 class="sec" style="margin-top:0">PANEL DE ADMINISTRACIÓN</h4>
+    <p class="nota">Solo vos ves esta pestaña. Desde acá podés ver todos los usuarios y eliminar sus datos. Para eliminar también la cuenta de autenticación, hacelo desde <b>Firebase Console → Authentication → Users</b>.</p>
+    <div class="acciones" style="margin-bottom:12px"><button class="btn pri" onclick="listarUsuarios()">Actualizar lista</button></div>
+    <div id="listaUsuarios"></div>
   </div>
 </div>
 
@@ -283,7 +293,7 @@ service cloud.firestore {
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.0.1 — fix login/logout toggle</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.1.1 — fix visibilidad pestaña Admin</p>
   </div>
 </div>
 
@@ -314,15 +324,20 @@ try{
 }catch(e){ console.warn('Firebase no configurado:',e.message); }
 
 const DOMAIN='@nadaplan.app'; // sufijo interno para convertir usuario → email
+const ADMIN_UID='nNCZCRdvxXf2lv4oEw2F655cQUg2';
 function userEmail(u){ return u.trim().toLowerCase().replace(/\s/g,'_')+DOMAIN; }
 function userName(email){ return email?email.replace(DOMAIN,'').replace(/_/g,' '):''; }
+function esAdmin(){ return currentUser&&currentUser.uid===ADMIN_UID; }
 
 function showLogin(){ document.getElementById('loginScreen').style.display=''; document.getElementById('appMain').style.display='none'; }
 function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appMain').style.display='';
   document.getElementById('userBar').innerHTML=currentUser?
-    'Sesión de <b>'+userName(currentUser.email)+'</b> <button onclick="doLogout()">Cerrar sesión</button>':'';
+    'Sesión de <b>'+userName(currentUser.email)+'</b>'+(esAdmin()?' · <span style="color:var(--r3)">admin</span>':'')+' <button onclick="doLogout()">Cerrar sesión</button>':'';
+  // mostrar pestaña admin solo para el admin
+  const tabAdmin=document.getElementById('tabAdmin');
+  if(tabAdmin) tabAdmin.style.display=esAdmin()?'inline-block':'none';
 }
 async function doLogin(){
   const u=document.getElementById('authUser').value.trim(), p=document.getElementById('authPass').value;
@@ -339,7 +354,10 @@ async function doRegister(){
   try{ await auth.createUserWithEmailAndPassword(userEmail(u),p); }
   catch(e){ showErr(e.code==='auth/email-already-in-use'?'Ese usuario ya existe. Probá ingresar.':'Error: '+e.message); }
 }
-function doLogout(){ auth.signOut(); }
+function estadoNuevo(){
+  return { cfg:{r1:120,min:90,peso:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
+}
+function doLogout(){ localStorage.removeItem(KEY); auth.signOut(); }
 function showErr(m){ const el=document.getElementById('authErr'); if(el) el.textContent=m; }
 
 /* ================= FIRESTORE SYNC ================= */
@@ -352,8 +370,14 @@ async function cargarDesdeNube(){
 }
 function guardarEnNube(){
   if(!fbOk||!currentUser) return;
-  try{ db.collection('users').doc(currentUser.uid).set(JSON.parse(JSON.stringify(S))); }
-  catch(e){ console.warn('Error guardando en Firestore:',e); }
+  try{
+    const data=JSON.parse(JSON.stringify(S));
+    data._uid=currentUser.uid;
+    data._user=userName(currentUser.email);
+    data._email=currentUser.email;
+    data._updated=new Date().toISOString();
+    db.collection('users').doc(currentUser.uid).set(data);
+  }catch(e){ console.warn('Error guardando en Firestore:',e); }
 }
 
 if(fbOk){
@@ -362,8 +386,9 @@ if(fbOk){
     if(user){
       const nube=await cargarDesdeNube();
       if(nube&&nube.cfg) S=nube;
-      else { S=cargarLocal(); guardarEnNube(); }
+      else S=estadoNuevo();
       if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+      persistir();
       showApp(); render();
     } else { showLogin(); }
   });
@@ -943,11 +968,42 @@ function renderBloques(){
   box.innerHTML=h;
 }
 
+/* ============ ADMIN ============ */
+async function listarUsuarios(){
+  const box=document.getElementById('listaUsuarios');
+  if(!box){ return; } box.innerHTML='<p class="nota">Cargando...</p>';
+  if(!esAdmin()){ box.innerHTML='<p class="nota">Sin permisos.</p>'; return; }
+  try{
+    const snap=await db.collection('users').get();
+    if(snap.empty){ box.innerHTML='<p class="nota">No hay usuarios registrados.</p>'; return; }
+    let h='<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Usuario</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Sesiones</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Última actividad</th><th style="padding:6px 8px;border-bottom:1px solid var(--line)"></th></tr>';
+    snap.forEach(doc=>{
+      const d=doc.data();
+      const nombre=d._user||doc.id.slice(0,8);
+      const nSes=(d.sesiones||[]).length;
+      const upd=d._updated?d._updated.slice(0,10):'—';
+      const esYo=doc.id===ADMIN_UID;
+      h+='<tr style="border-bottom:1px solid rgba(28,65,82,.3)"><td style="padding:6px 8px;font-weight:700">'+escF(nombre)+(esYo?' <span style="color:var(--r3);font-size:11px">(vos)</span>':'')+'</td><td style="padding:6px 8px;font-family:var(--mono)">'+nSes+'</td><td style="padding:6px 8px;font-family:var(--mono)">'+upd+'</td><td style="padding:6px 8px">'+(esYo?'':'<button class="btn mini peligro" onclick="eliminarUsuario(\''+doc.id+'\',\''+escF(nombre)+'\')">Eliminar</button>')+'</td></tr>';
+    });
+    h+='</table>';
+    box.innerHTML=h;
+  }catch(e){ box.innerHTML='<p class="nota" style="color:var(--r3)">Error: '+e.message+'. ¿Actualizaste las reglas de Firestore?</p>'; }
+}
+async function eliminarUsuario(uid,nombre){
+  if(!confirm('¿Eliminar todos los datos de "'+nombre+'"? Esta acción no se puede deshacer. Para eliminar también la cuenta, hacelo desde Firebase Console → Authentication.')) return;
+  try{
+    await db.collection('users').doc(uid).delete();
+    alert('Datos de "'+nombre+'" eliminados.');
+    listarUsuarios();
+  }catch(e){ alert('Error al eliminar: '+e.message); }
+}
+
 /* ============ CONFIG / RESPALDO ============ */
 function verTab(t){
-  ['R','T','F','C'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
+  ['R','T','F','C','Admin'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
   if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; document.getElementById('cPeso').value=S.cfg.peso||''; }
   if(t==='F'){ renderFuentes(); renderBloques(); }
+  if(t==='Admin') listarUsuarios();
 }
 function guardarCfg(ev){
   ev.preventDefault();
