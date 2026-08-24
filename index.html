@@ -167,12 +167,19 @@
   <p>Generador de rutinas para aguas abiertas 10K</p>
   <div class="loginBox">
     <div id="loginForm">
-      <label>Usuario<input id="authUser" placeholder="Ej: christian" autocapitalize="none" autocomplete="username"></label>
+      <label>Usuario<input id="authUser" placeholder="Ej: juanperez" autocapitalize="none" autocomplete="username"></label>
       <label>Contraseña<input id="authPass" type="password" placeholder="Mínimo 6 caracteres" autocomplete="current-password"></label>
       <button class="btn pri" onclick="doLogin()">Ingresar</button>
       <button class="btn" onclick="doRegister()">Crear cuenta</button>
       <div class="err" id="authErr"></div>
-      <p class="alt">Cada persona crea su usuario y tiene sus propios datos.</p>
+      <p class="alt">La cuenta requiere aprobación del administrador.</p>
+    </div>
+    <div id="pendienteScreen" style="display:none;text-align:center">
+      <div style="font-size:40px;margin-bottom:10px">⏳</div>
+      <h3 style="margin-bottom:8px">Cuenta pendiente de aprobación</h3>
+      <p class="nota">Tu cuenta fue creada. El administrador tiene que aprobarla para que puedas acceder. Si ya te avisaron que está aprobada, tocá el botón.</p>
+      <button class="btn pri" onclick="reintentar()" style="margin-top:12px">Reintentar</button>
+      <button class="btn" onclick="doLogout()" style="margin-top:8px">Cerrar sesión</button>
     </div>
   </div>
 </div>
@@ -286,6 +293,8 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, write: if request.auth != null
                          && request.auth.uid == userId;
+      allow read, delete, update: if request.auth != null
+                         && request.auth.uid == 'nNCZCRdvxXf2lv4oEw2F655cQUg2';
     }
   }
 }</code>
@@ -293,7 +302,7 @@ service cloud.firestore {
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.1.1 — fix visibilidad pestaña Admin</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.2 — aprobación de usuarios, panel admin con pendientes</p>
   </div>
 </div>
 
@@ -329,7 +338,13 @@ function userEmail(u){ return u.trim().toLowerCase().replace(/\s/g,'_')+DOMAIN; 
 function userName(email){ return email?email.replace(DOMAIN,'').replace(/_/g,' '):''; }
 function esAdmin(){ return currentUser&&currentUser.uid===ADMIN_UID; }
 
-function showLogin(){ document.getElementById('loginScreen').style.display=''; document.getElementById('appMain').style.display='none'; }
+function showLogin(){
+  document.getElementById('loginScreen').style.display='';
+  document.getElementById('appMain').style.display='none';
+  document.getElementById('authUser').value='';
+  document.getElementById('authPass').value='';
+  showErr('');
+}
 function showApp(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('appMain').style.display='';
@@ -360,6 +375,25 @@ function estadoNuevo(){
 function doLogout(){ localStorage.removeItem(KEY); auth.signOut(); }
 function showErr(m){ const el=document.getElementById('authErr'); if(el) el.textContent=m; }
 
+function showPendiente(){
+  document.getElementById('loginForm').style.display='none';
+  document.getElementById('pendienteScreen').style.display='';
+  document.getElementById('appMain').style.display='none';
+}
+function showLoginForm(){
+  document.getElementById('loginForm').style.display='';
+  document.getElementById('pendienteScreen').style.display='none';
+}
+async function reintentar(){
+  if(!currentUser) return;
+  const nube=await cargarDesdeNube();
+  if(nube&&nube._status==='aprobado'){
+    S=nube;
+    if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+    persistir(); showApp(); render();
+  } else { alert('Tu cuenta todavía no fue aprobada.'); }
+}
+
 /* ================= FIRESTORE SYNC ================= */
 async function cargarDesdeNube(){
   if(!fbOk||!currentUser) return null;
@@ -376,6 +410,7 @@ function guardarEnNube(){
     data._user=userName(currentUser.email);
     data._email=currentUser.email;
     data._updated=new Date().toISOString();
+    if(!data._status) data._status='aprobado'; // mantener status existente
     db.collection('users').doc(currentUser.uid).set(data);
   }catch(e){ console.warn('Error guardando en Firestore:',e); }
 }
@@ -385,12 +420,36 @@ if(fbOk){
     currentUser=user;
     if(user){
       const nube=await cargarDesdeNube();
-      if(nube&&nube.cfg) S=nube;
-      else S=estadoNuevo();
-      if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
-      persistir();
-      showApp(); render();
-    } else { showLogin(); }
+      // admin siempre entra
+      if(esAdmin()){
+        if(nube&&nube.cfg) S=nube;
+        else S=estadoNuevo();
+        S._status='aprobado';
+        if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+        persistir(); showApp(); render();
+        return;
+      }
+      // usuario existente: chequear status
+      if(nube){
+        if(nube._status==='aprobado'){
+          S=nube;
+          if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+          persistir(); showApp(); render();
+        } else {
+          showPendiente();
+        }
+        return;
+      }
+      // usuario nuevo: crear con status pendiente
+      const nuevo=estadoNuevo();
+      nuevo._status='pendiente';
+      nuevo._uid=user.uid;
+      nuevo._user=userName(user.email);
+      nuevo._email=user.email;
+      nuevo._updated=new Date().toISOString();
+      db.collection('users').doc(user.uid).set(nuevo);
+      showPendiente();
+    } else { showLogin(); showLoginForm(); }
   });
 } else {
   // sin Firebase: modo local (compatible con versión anterior)
@@ -976,21 +1035,45 @@ async function listarUsuarios(){
   try{
     const snap=await db.collection('users').get();
     if(snap.empty){ box.innerHTML='<p class="nota">No hay usuarios registrados.</p>'; return; }
-    let h='<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Usuario</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Sesiones</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Última actividad</th><th style="padding:6px 8px;border-bottom:1px solid var(--line)"></th></tr>';
-    snap.forEach(doc=>{
-      const d=doc.data();
-      const nombre=d._user||doc.id.slice(0,8);
+    // separar pendientes y aprobados
+    const pendientes=[], aprobados=[];
+    snap.forEach(doc=>{ const d=doc.data(); d._docId=doc.id; if(d._status==='pendiente') pendientes.push(d); else aprobados.push(d); });
+    let h='';
+    if(pendientes.length){
+      h+='<h4 class="sec" style="color:var(--r2)">PENDIENTES DE APROBACIÓN ('+pendientes.length+')</h4>';
+      h+='<div style="margin-bottom:14px">';
+      pendientes.forEach(d=>{
+        const nombre=d._user||d._docId.slice(0,8);
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px dashed var(--r2);border-radius:10px;margin-bottom:8px;background:rgba(255,194,75,.06)">'+
+          '<span style="font-weight:800">'+escF(nombre)+'</span>'+
+          '<span style="font-family:var(--mono);font-size:12px;color:var(--muted)">'+((d._updated||'').slice(0,10)||'—')+'</span>'+
+          '<span><button class="btn mini pri" onclick="aprobarUsuario(\''+d._docId+'\',\''+escF(nombre)+'\')">Aprobar</button> '+
+          '<button class="btn mini peligro" onclick="eliminarUsuario(\''+d._docId+'\',\''+escF(nombre)+'\')">Rechazar</button></span></div>';
+      });
+      h+='</div>';
+    }
+    h+='<h4 class="sec">USUARIOS APROBADOS ('+aprobados.length+')</h4>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:13px"><tr><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Usuario</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Sesiones</th><th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);color:var(--muted)">Última actividad</th><th style="padding:6px 8px;border-bottom:1px solid var(--line)"></th></tr>';
+    aprobados.forEach(d=>{
+      const nombre=d._user||d._docId.slice(0,8);
       const nSes=(d.sesiones||[]).length;
-      const upd=d._updated?d._updated.slice(0,10):'—';
-      const esYo=doc.id===ADMIN_UID;
-      h+='<tr style="border-bottom:1px solid rgba(28,65,82,.3)"><td style="padding:6px 8px;font-weight:700">'+escF(nombre)+(esYo?' <span style="color:var(--r3);font-size:11px">(vos)</span>':'')+'</td><td style="padding:6px 8px;font-family:var(--mono)">'+nSes+'</td><td style="padding:6px 8px;font-family:var(--mono)">'+upd+'</td><td style="padding:6px 8px">'+(esYo?'':'<button class="btn mini peligro" onclick="eliminarUsuario(\''+doc.id+'\',\''+escF(nombre)+'\')">Eliminar</button>')+'</td></tr>';
+      const upd=(d._updated||'').slice(0,10)||'—';
+      const esYo=d._docId===ADMIN_UID;
+      h+='<tr style="border-bottom:1px solid rgba(28,65,82,.3)"><td style="padding:6px 8px;font-weight:700">'+escF(nombre)+(esYo?' <span style="color:var(--r3);font-size:11px">(vos)</span>':'')+'</td><td style="padding:6px 8px;font-family:var(--mono)">'+nSes+'</td><td style="padding:6px 8px;font-family:var(--mono)">'+upd+'</td><td style="padding:6px 8px">'+(esYo?'':'<button class="btn mini peligro" onclick="eliminarUsuario(\''+d._docId+'\',\''+escF(nombre)+'\')">Eliminar</button>')+'</td></tr>';
     });
     h+='</table>';
     box.innerHTML=h;
   }catch(e){ box.innerHTML='<p class="nota" style="color:var(--r3)">Error: '+e.message+'. ¿Actualizaste las reglas de Firestore?</p>'; }
 }
+async function aprobarUsuario(uid,nombre){
+  try{
+    await db.collection('users').doc(uid).update({_status:'aprobado'});
+    alert('"'+nombre+'" aprobado. Ya puede usar la app.');
+    listarUsuarios();
+  }catch(e){ alert('Error: '+e.message); }
+}
 async function eliminarUsuario(uid,nombre){
-  if(!confirm('¿Eliminar todos los datos de "'+nombre+'"? Esta acción no se puede deshacer. Para eliminar también la cuenta, hacelo desde Firebase Console → Authentication.')) return;
+  if(!confirm('¿Eliminar todos los datos de "'+nombre+'"? Para eliminar también la cuenta de login, hacelo desde Firebase Console → Authentication.')) return;
   try{
     await db.collection('users').doc(uid).delete();
     alert('Datos de "'+nombre+'" eliminados.');
