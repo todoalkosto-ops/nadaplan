@@ -304,7 +304,7 @@ service cloud.firestore {
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.3 — kcal con METs corregidos (Harris-Benedict + Compendium 2024)</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.4 — 11 calentamientos distintos, más variedad</p>
   </div>
 </div>
 
@@ -524,7 +524,34 @@ const ENTCAL = [
    L(2*n,50,'pullboy y manoplas, brazada de crol (15" de pausa)',null,{mat:'pullman'})]}),
  n=>({t:'combinada con manoplas', ls:[
    L(2*n,100,'25 barrido 25 patada 50 nado (10/20" de pausa)',null,{mat:'mixto',pausa:18}),
-   L(2*n,50,'drill con manoplas (2da mitad: con aletas)',null,{mat:'drill'})]})
+   L(2*n,50,'drill con manoplas (2da mitad: con aletas)',null,{mat:'drill'})]}),
+ // --- nuevas entradas en calor ---
+ n=>({t:'progresiva por ritmo', ls:[
+   L(1,200,'suave a gusto, aflojando',null,{mat:'suave',pausa:20}),
+   L(1,200,'crol cómodo, armando la brazada',null,{mat:'nado',pausa:20}),
+   L(n,100,'crol progresivo: cada 100 un poco más rápido que el anterior (15" de pausa)',null,{mat:'nado'})]}),
+ n=>({t:'multi-estilo', ls:[
+   L(1,100,'espalda suave (15" de pausa)',null,{mat:'suave'}),
+   L(1,100,'pecho suave (15" de pausa)',null,{mat:'suave'}),
+   L(1,100,'crol suave (15" de pausa)',null,{mat:'suave'}),
+   L(n,100,'25 espalda 25 pecho 50 crol (15" de pausa)',null,{mat:'mixto'}),
+   L(2*n,50,'crol progresivo 1@'+2*n+' (15" de pausa)',null,{mat:'nado'})]}),
+ n=>({t:'continua con cambios', ls:[
+   L(1,400+200*n,'nado continuo sin parar: cada 100 cambiá algo — los 1eros 100 suave, después 100 solo brazo derecho, 100 solo izquierdo, 100 respirando cada 5, 100 fuerza, y repetir',null,{mat:'nado',pausa:30})]}),
+ n=>({t:'descendente con aletas', ls:[
+   L(1,200,'aletas, crol largo y suelto (15" de pausa)',null,{mat:'aletas'}),
+   L(2,100,'aletas: 50 espalda 50 crol (15" de pausa)',null,{mat:'aletas'}),
+   L(2*n,50,'aletas: progresivo, de suave a fuerte (10" de pausa)',null,{mat:'aletas',pausa:10}),
+   L(2*n,25,'sin aletas: 1 suave 1 fuerte (10" de pausa)',null,{mat:'nado',pausa:10})]}),
+ n=>({t:'pullboy y respiración', ls:[
+   L(1,100+100*n,'pullboy, crol cómodo, respirar cada 3 brazadas',null,{mat:'pull',pausa:20}),
+   L(2*n,50,'sin material: 25 respirar cada 5 brazadas 25 normal (15" de pausa)',null,{mat:'nado'}),
+   L(n,100,'nado suelto, eligiendo la respiración que quieras (15" de pausa)',null,{mat:'suave'})]}),
+ n=>({t:'activación neuromuscular', ls:[
+   L(1,200,'nado suave continuo',null,{mat:'suave',pausa:20}),
+   L(n+1,50,'aceleración de 0 a 80%: arrancá quieto y terminá rápido sin llegar al máximo (20" de pausa)',null,{mat:'nado',pausa:20}),
+   L(n,100,'manoplas: crol con foco en la tracción, sentir el agua (15" de pausa)',null,{mat:'man'}),
+   L(n+1,50,'25 patada lateral (de cada lado) 25 nado (10" de pausa)',null,{mat:'nado',pausa:10})]})
 ];
 /* --- Activaciones --- */
 const ACT = [
