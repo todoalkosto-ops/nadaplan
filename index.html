@@ -261,10 +261,12 @@
     <form class="testf" onsubmit="guardarCfg(event)">
       <label class="f">R1 cada 100 m (mm:ss)<input id="cR1" pattern="\d{1,2}:\d{2}"></label>
       <label class="f">Minutos por sesión<input id="cMin" type="number" min="40" max="150"></label>
-      <label class="f">Peso corporal (kg)<input id="cPeso" type="number" min="30" max="200" step="0.5"></label>
+      <label class="f">Peso (kg)<input id="cPeso" type="number" min="30" max="200" step="0.5"></label>
+      <label class="f">Edad (años)<input id="cEdad" type="number" min="10" max="99"></label>
+      <label class="f">Altura (cm)<input id="cAltura" type="number" min="100" max="220"></label>
       <button class="btn pri" type="submit">Guardar</button>
     </form>
-    <p class="nota">De tu R1 salen R2 (~8&nbsp;% más rápido) y R3 (~15&nbsp;% más rápido). El tiempo disponible define cuántos metros entran. El peso se usa para estimar las calorías de cada sesión (~0,25 kcal/m ajustado a tu peso).</p>
+    <p class="nota">Las calorías se estiman con <b>METs corregidos</b>: la app calcula tu metabolismo basal con Harris-Benedict (usa peso, edad y altura), y aplica un MET distinto a cada bloque de la sesión según su intensidad (entrada en calor ~5.0, trabajo principal aeróbico ~7.0, velocidad ~8.0, resistencia ~7.5, máximos ~9.0, final ~4.5). Si no cargás edad, las kcal no aparecen. La altura es opcional (se estima 175 cm si no la ponés).</p>
     <h4 class="sec">POSICIÓN EN EL PLAN</h4>
     <div class="acciones">
       <button class="btn" onclick="mover(-1)">‹ Sesión anterior</button>
@@ -302,7 +304,7 @@ service cloud.firestore {
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.2 — aprobación de usuarios, panel admin con pendientes</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.3 — kcal con METs corregidos (Harris-Benedict + Compendium 2024)</p>
   </div>
 </div>
 
@@ -370,7 +372,7 @@ async function doRegister(){
   catch(e){ showErr(e.code==='auth/email-already-in-use'?'Ese usuario ya existe. Probá ingresar.':'Error: '+e.message); }
 }
 function estadoNuevo(){
-  return { cfg:{r1:120,min:90,peso:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
+  return { cfg:{r1:120,min:90,peso:0,edad:0,altura:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
 }
 function doLogout(){ localStorage.removeItem(KEY); auth.signOut(); }
 function showErr(m){ const el=document.getElementById('authErr'); if(el) el.textContent=m; }
@@ -389,7 +391,7 @@ async function reintentar(){
   const nube=await cargarDesdeNube();
   if(nube&&nube._status==='aprobado'){
     S=nube;
-    if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+    if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0;
     persistir(); showApp(); render();
   } else { alert('Tu cuenta todavía no fue aprobada.'); }
 }
@@ -425,7 +427,7 @@ if(fbOk){
         if(nube&&nube.cfg) S=nube;
         else S=estadoNuevo();
         S._status='aprobado';
-        if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+        if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0;
         persistir(); showApp(); render();
         return;
       }
@@ -433,7 +435,7 @@ if(fbOk){
       if(nube){
         if(nube._status==='aprobado'){
           S=nube;
-          if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0;
+          if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0;
           persistir(); showApp(); render();
         } else {
           showPendiente();
@@ -460,7 +462,7 @@ if(fbOk){
 const KEY='nadaplan_v1';
 let S = cargarLocal();
 function cargarLocal(){
-  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; if(!d.cfg.peso) d.cfg.peso=0; return d; } }catch(e){}
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; if(!d.cfg.peso) d.cfg.peso=0; if(!d.cfg.edad) d.cfg.edad=0; if(!d.cfg.altura) d.cfg.altura=0; return d; } }catch(e){}
   return { cfg:{r1:120,min:90,peso:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
 }
 function cargar(){ return cargarLocal(); }
@@ -657,6 +659,41 @@ const DIAS={1:'Aeróbico base',2:'Velocidad y técnica',3:'Resistencia específi
 function esTolerancia(p){ return p.ciclo%2===0 && p.sem===3 && p.dia===2; }
 function esTest(p){ return p.sem===1 && p.dia===3; }
 
+/* ============ CALORÍAS (METs corregidos + Harris-Benedict) ============ */
+/*
+ * Fuente: Compendium of Physical Activities 2024 + corrected METs (Kozey et al.)
+ * METs de crol por intensidad (Ainsworth et al. 2024):
+ *   Lento/drill/patada: 5.8 · Medio (R1-R2): 7.0 · Rápido (R2-R3): 8.0 · Muy rápido (R3+): 10.5
+ * MET promedio ponderado por tipo de bloque de la sesión:
+ */
+const MET_BLOQUE={ENTCAL:5.0, ACT:7.5, FINAL:4.5};
+const MET_DIA_TPPAL={1:7.0, 2:8.0, 3:7.5}; // aeróbico, velocidad, resistencia
+const MET_DESC=5.0, MET_TOL=9.0;
+function calcKcal(ses,p,cfg){
+  if(!cfg.peso || !cfg.edad) return null;
+  // Harris-Benedict RMR (hombres): kcal/día
+  const alt=cfg.altura||175; // si no cargó altura, estimamos 175cm
+  const rmr=66.5 + 13.75*cfg.peso + 5.003*alt - 6.755*cfg.edad;
+  // Factor de corrección: RMR real vs RMR estándar (1 kcal/kg/hr × peso × 24)
+  const stdRMR=cfg.peso*24;
+  const corr=rmr/stdRMR;
+  // Calcular kcal por bloque con su MET específico
+  let totalKcal=0;
+  ses.bloques.forEach(b=>{
+    const minBloque=b.ls.reduce((a,l)=>a+l.secs,0)/60;
+    let met;
+    if(b.sec.includes('ENT CAL')) met=MET_BLOQUE.ENTCAL;
+    else if(b.sec.includes('ACT')) met=MET_BLOQUE.ACT;
+    else if(b.sec.includes('FINAL')) met=MET_BLOQUE.FINAL;
+    else if(b.sec.includes('TEST')) met=7.0;
+    else if(ses.tol) met=MET_TOL;
+    else if(ses.desc) met=MET_DESC;
+    else met=MET_DIA_TPPAL[p.dia]||7.0;
+    // kcal/min = (MET × 3.5 × peso) / 200, corregido por edad/altura
+    totalKcal += met * corr * 3.5 * cfg.peso / 200 * minBloque;
+  });
+  return Math.round(totalKcal);
+}
 /* --- Bloques propios: conversor a formato del generador --- */
 function lineaAL(li){
   const cons=escF(li.tx||'');
@@ -747,7 +784,7 @@ function render(){
 
   const ses=construir(p,S.cfg.min);
   const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const kcalEst=S.cfg.peso? Math.round(ses.m * 0.25 * (S.cfg.peso/72)) : null;
+  const kcalEst=calcKcal(ses,p,S.cfg);
   const iHecha=buscarHecha(p);
   const hecha=iHecha>=0?S.sesiones[iHecha]:null;
   // bloques a renderizar: snapshot si fue hecha, o generados si pendiente
@@ -819,7 +856,7 @@ function completar(){
   const ses=construir(S.pos,S.cfg.min);
   // snapshot: guardar los bloques renderizados con los tiempos actuales
   const snap=ses.bloques.map(b=>({sec:b.sec,sub:b.sub||null,ls:b.ls.map(l=>({reps:l.reps,dist:l.dist,tx:typeof l.tx==='string'?l.tx:(Array.isArray(l.tx)?l.tx.join(''):String(l.tx)),so:l.so,m:l.m,sub:l.sub||null,pausaLibre:l.pausaLibre||null}))}));
-  const kcalEst=S.cfg.peso? Math.round(ses.m * 0.25 * (S.cfg.peso/72)) : null;
+  const kcalEst=calcKcal(ses,S.pos,S.cfg);
   S.sesiones.push({
     f:fVal, h:hVal||'', c:S.pos.ciclo, s:S.pos.sem, d:S.pos.dia, m:ses.m,
     min:Math.round(ses.secs/60), kcal:kcalEst, r1:S.cfg.r1,
@@ -858,14 +895,14 @@ function aplicarR1(s){ S.cfg.r1=s; persistir(); render(); document.getElementByI
 function renderTests(){
   const km=(S.sesiones.reduce((a,s)=>a+s.m,0)/1000);
   const mejor=S.tests.length?Math.min(...S.tests.map(t=>t.pace)):null;
-  const kcalFactor=S.cfg.peso? 0.25*(S.cfg.peso/72) : 0.25;
-  const kcalTotal=Math.round((S.sesiones.reduce((a,s)=>a+s.m,0))*kcalFactor/1000);
+  const kcalFactor=S.cfg.peso&&S.cfg.edad? 1 : 0;
+  const kcalTotal=S.sesiones.reduce((a,s)=>a+(s.kcal||0),0);
   document.getElementById('kpis').innerHTML=
     '<div class="kpi"><div class="v">'+S.sesiones.length+'</div><div class="l">sesiones completadas</div></div>'+
     '<div class="kpi"><div class="v">'+km.toFixed(1)+' km</div><div class="l">nadados en el plan</div></div>'+
     '<div class="kpi"><div class="v">'+(mejor?fmt(mejor):'—')+'</div><div class="l">mejor ritmo de test /100</div></div>'+
     '<div class="kpi"><div class="v">'+fmt(S.cfg.r1)+'</div><div class="l">R1 vigente /100</div></div>'+
-    (S.cfg.peso?'<div class="kpi"><div class="v">'+kcalTotal.toLocaleString('es-AR')+' k</div><div class="l">kcal quemadas (estimadas)</div></div>':'');
+    (kcalTotal?'<div class="kpi"><div class="v">'+(kcalTotal/1000).toFixed(1)+' k</div><div class="l">kcal quemadas (estimadas)</div></div>':'');
   // tabla
   let th='<tr><th>Fecha</th><th>200 nº1</th><th>200 nº2</th><th>200 nº3</th><th>Ritmo /100</th></tr>';
   S.tests.slice().reverse().forEach(t=>{
@@ -904,7 +941,8 @@ function imprimirSesion(){
   const fase=FASES[p.sem-1];
   const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
   let h='<div class="ph">NadaPlan — '+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</div>';
-  h+='<div class="pm">Sesión N° '+(S.sesiones.length+1)+' · '+hoy+' · Ciclo '+p.ciclo+' · Semana '+p.sem+' ('+fase+') · Día '+p.dia+'/3 · '+ses.m.toLocaleString('es-AR')+' m · ~'+Math.round(ses.secs/60)+' min'+(S.cfg.peso?' · ~'+Math.round(ses.m*0.25*(S.cfg.peso/72))+' kcal':'')+'</div>';
+  const kcalPrint=calcKcal(ses,p,S.cfg);
+  h+='<div class="pm">Sesión N° '+(S.sesiones.length+1)+' · '+hoy+' · Ciclo '+p.ciclo+' · Semana '+p.sem+' ('+fase+') · Día '+p.dia+'/3 · '+ses.m.toLocaleString('es-AR')+' m · ~'+Math.round(ses.secs/60)+' min'+(kcalPrint?' · ~'+kcalPrint+' kcal':'')+'</div>';
   if(ses.test) h+='<div class="pav">TEST: cronometrar los 3x200 del final del TPPAL y cargarlos en la app.</div>';
   if(ses.tol) h+='<div class="pav">Sesión esporádica de tolerancia: poco volumen, máxima intensidad, descansos largos.</div>';
   if(ses.desc) h+='<div class="pav">Semana de descarga: todo cómodo, sin forzar.</div>';
@@ -1084,14 +1122,16 @@ async function eliminarUsuario(uid,nombre){
 /* ============ CONFIG / RESPALDO ============ */
 function verTab(t){
   ['R','T','F','C','Admin'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
-  if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; document.getElementById('cPeso').value=S.cfg.peso||''; }
+  if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; document.getElementById('cPeso').value=S.cfg.peso||''; document.getElementById('cEdad').value=S.cfg.edad||''; document.getElementById('cAltura').value=S.cfg.altura||''; }
   if(t==='F'){ renderFuentes(); renderBloques(); }
   if(t==='Admin') listarUsuarios();
 }
 function guardarCfg(ev){
   ev.preventDefault();
   const r=parse(document.getElementById('cR1').value), m=+document.getElementById('cMin').value, p=+document.getElementById('cPeso').value;
+  const e=+document.getElementById('cEdad').value, a=+document.getElementById('cAltura').value;
   if(r) S.cfg.r1=r; if(m>=40&&m<=150) S.cfg.min=m; if(p>=30&&p<=200) S.cfg.peso=p;
+  if(e>=10&&e<=99) S.cfg.edad=e; if(a>=100&&a<=220) S.cfg.altura=a;
   persistir(); render(); verTab('R');
 }
 function exportar(){
