@@ -304,7 +304,7 @@ service cloud.firestore {
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.5 — calentamientos más cortos (400-600m), más metros para el trabajo principal</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.5.1 — fix: final acotado a 200-400m</p>
   </div>
 </div>
 
@@ -768,7 +768,7 @@ function construir(p,minutos){
     else          main=mainSel(Math.max(1,n));
     if(test){ bloques.push({sec:'TPPAL · '+main.t, ls:main.ls, sub:main.sub}); bloques.push({sec:'TEST', ...TEST()}); }
     else bloques.push({sec:'TPPAL · '+main.t, ls:main.ls, sub:main.sub});
-    bloques.push({sec:'FINAL', ...(lean?FINAL[3](1):poolFI[iF](desc?1:w))});
+    bloques.push({sec:'FINAL', ...(lean?FINAL[3](1):poolFI[iF](desc?1:1))});
     let secs=0,m=0;
     bloques.forEach(b=>b.ls.forEach(l=>{secs+=l.secs;m+=l.m;}));
     return {bloques,secs,m};
