@@ -304,7 +304,7 @@ service cloud.firestore {
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.4 — 11 calentamientos distintos, más variedad</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.5 — calentamientos más cortos (400-600m), más metros para el trabajo principal</p>
   </div>
 </div>
 
@@ -508,8 +508,8 @@ const pausaBloque = s => ({reps:0,dist:0,tx:null,so:null,secs:s,m:0,pausaLibre:f
 /* --- Entradas en calor: n = tamaño 1..3 --- */
 const ENTCAL = [
  n=>({t:'clásica de 75s', ls:[
-   L(4+2*n,75,'4 = 25 barrido 50 nado · resto = 25 patada 50 nado (pausa a gusto)',null,{mat:'mixto',pausa:12}),
-   L(4+2*n,50,'drill a gusto',null,{mat:'drill'})]}),
+   L(4,75,'2 = 25 barrido 50 nado · 2 = 25 patada 50 nado (pausa a gusto)',null,{mat:'mixto',pausa:12}),
+   L(4,50,'drill a gusto',null,{mat:'drill'})]}),
  n=>({t:'bloques 50/100', ls:[
    L(2*(n+1),50,'25 barrido 25 nado (15" de pausa)',null,{mat:'mixto'}),
    L(2*n,100,'aletas: 50 patada 50 nado (15" de pausa)',null,{mat:'patAletas'})]}),
@@ -537,7 +537,7 @@ const ENTCAL = [
    L(n,100,'25 espalda 25 pecho 50 crol (15" de pausa)',null,{mat:'mixto'}),
    L(2*n,50,'crol progresivo 1@'+2*n+' (15" de pausa)',null,{mat:'nado'})]}),
  n=>({t:'continua con cambios', ls:[
-   L(1,400+200*n,'nado continuo sin parar: cada 100 cambiá algo — los 1eros 100 suave, después 100 solo brazo derecho, 100 solo izquierdo, 100 respirando cada 5, 100 fuerza, y repetir',null,{mat:'nado',pausa:30})]}),
+   L(1,400,'nado continuo sin parar: cada 100 cambiá algo — 100 suave, 100 solo brazo derecho, 100 solo izquierdo, 100 fuerza',null,{mat:'nado',pausa:30})]}),
  n=>({t:'descendente con aletas', ls:[
    L(1,200,'aletas, crol largo y suelto (15" de pausa)',null,{mat:'aletas'}),
    L(2,100,'aletas: 50 espalda 50 crol (15" de pausa)',null,{mat:'aletas'}),
@@ -758,9 +758,9 @@ function construir(p,minutos){
     else { const base=(p.dia===3?D3.slice(0,2):(p.dia===1?D1:D2)); const pool=base.concat(UP.TP(p.dia)); mainSel=pool[Math.floor(rand()*pool.length)]; }
   }
 
-  function arma(n,w,lean){
+  function arma(n,w,wEC,lean){
     const bloques=[];
-    bloques.push({sec:'ENT CAL', ...poolEC[iEC](w)});
+    bloques.push({sec:'ENT CAL', ...poolEC[iEC](wEC)});
     if(!desc && !lean) bloques.push({sec:'ACT', ...poolAC[iA]()});
     let main;
     if(desc)      main=DESCARGA[p.dia](Math.max(1,n));
@@ -778,13 +778,14 @@ function construir(p,minutos){
   const nMax = desc||tol ? 3 : 5;
   for(let n=nMax;n>=1;n--){
     const w = n>=4?3 : n>=2?2 : 1;
-    const cand=arma(n,w,false);
+    const wEC = 1; // calentamiento corto siempre (400-500m), los metros van al trabajo principal
+    const cand=arma(n,w,wEC,false);
     if(cand.secs<=presupuesto){ mejor=cand; break; }
     if(n===1) mejor=cand;
   }
   // si ni la mínima entra: versión recortada (sin ACT, final mínimo)
   if(mejor.secs>presupuesto){
-    const lean=arma(1,1,true);
+    const lean=arma(1,1,1,true);
     lean.recortada=true;
     mejor=lean;
   }
