@@ -163,7 +163,7 @@
 <body>
 <div class="wrap">
 <div id="loginScreen">
-  <h2>Nada<span>Plan</span></h2>
+  <h2 id="loginTitle">Nada<span>Plan</span></h2>
   <p>Generador de rutinas para aguas abiertas 10K</p>
   <div class="loginBox">
     <div id="loginForm">
@@ -187,7 +187,7 @@
 <div id="appMain" style="display:none">
 <div class="userBar" id="userBar"></div>
 <header>
-  <h1>Nada<span>Plan</span> · 10K aguas abiertas</h1>
+  <h1 id="appTitle">Nada<span>Plan</span> · 10K aguas abiertas</h1>
   <p>Generador de rutinas — estructura ENT CAL · ACT · TPPAL · FINAL, ciclos de 4 semanas con progresión</p>
 </header>
 
@@ -227,7 +227,11 @@
 <div id="vAdmin" class="hid">
   <div class="card">
     <h4 class="sec" style="margin-top:0">PANEL DE ADMINISTRACIÓN</h4>
-    <p class="nota">Solo vos ves esta pestaña. Desde acá podés ver todos los usuarios y eliminar sus datos. Para eliminar también la cuenta de autenticación, hacelo desde <b>Firebase Console → Authentication → Users</b>.</p>
+    <p class="nota">Solo vos ves esta pestaña.</p>
+    <h4 class="sec">NOMBRE DE LA APP</h4>
+    <div class="fila" style="margin-bottom:14px"><input id="adminAppName" placeholder="Ej: NadaPlan" style="max-width:260px"><button class="btn pri" onclick="guardarAppName()">Guardar nombre</button></div>
+    <h4 class="sec">USUARIOS</h4>
+    <p class="nota">Para eliminar la cuenta de autenticación, hacelo desde <b>Firebase Console → Authentication → Users</b>.</p>
     <div class="acciones" style="margin-bottom:12px"><button class="btn pri" onclick="listarUsuarios()">Actualizar lista</button></div>
     <div id="listaUsuarios"></div>
   </div>
@@ -298,13 +302,18 @@ service cloud.firestore {
       allow read, delete, update: if request.auth != null
                          && request.auth.uid == 'nNCZCRdvxXf2lv4oEw2F655cQUg2';
     }
+    match /config/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+                   && request.auth.uid == 'nNCZCRdvxXf2lv4oEw2F655cQUg2';
+    }
   }
 }</code>
     5. En <b>Project settings</b> (engranaje arriba a la izquierda) → <b>Your apps → Web (ícono &lt;/&gt;)</b> → Poné un nombre → <b>Register app</b><br>
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.5.1 — fix: final acotado a 200-400m</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.6 — nombre de la app configurable desde Admin</p>
   </div>
 </div>
 
@@ -423,6 +432,7 @@ if(fbOk){
     if(user){
       const nube=await cargarDesdeNube();
       // admin siempre entra
+      await cargarAppName();
       if(esAdmin()){
         if(nube&&nube.cfg) S=nube;
         else S=estadoNuevo();
@@ -968,7 +978,7 @@ function imprimirSesion(){
   const p=S.pos, ses=construir(p,S.cfg.min);
   const fase=FASES[p.sem-1];
   const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  let h='<div class="ph">NadaPlan — '+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</div>';
+  let h='<div class="ph">'+escF(appName)+' — '+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</div>';
   const kcalPrint=calcKcal(ses,p,S.cfg);
   h+='<div class="pm">Sesión N° '+(S.sesiones.length+1)+' · '+hoy+' · Ciclo '+p.ciclo+' · Semana '+p.sem+' ('+fase+') · Día '+p.dia+'/3 · '+ses.m.toLocaleString('es-AR')+' m · ~'+Math.round(ses.secs/60)+' min'+(kcalPrint?' · ~'+kcalPrint+' kcal':'')+'</div>';
   if(ses.test) h+='<div class="pav">TEST: cronometrar los 3x200 del final del TPPAL y cargarlos en la app.</div>';
@@ -1093,6 +1103,33 @@ function renderBloques(){
   box.innerHTML=h;
 }
 
+/* ============ NOMBRE DE LA APP ============ */
+let appName='NadaPlan';
+function aplicarAppName(){
+  const t=document.getElementById('appTitle');
+  const l=document.getElementById('loginTitle');
+  if(t) t.innerHTML=escF(appName)+' · <span style="color:var(--aqua)">10K aguas abiertas</span>';
+  if(l) l.innerHTML=escF(appName);
+  document.title=appName+' — Generador de rutinas 10K';
+}
+async function cargarAppName(){
+  if(!fbOk) return;
+  try{
+    const doc=await db.collection('config').doc('app').get();
+    if(doc.exists && doc.data().name){ appName=doc.data().name; aplicarAppName(); }
+  }catch(e){}
+}
+async function guardarAppName(){
+  const v=document.getElementById('adminAppName').value.trim();
+  if(!v){ alert('Poné un nombre.'); return; }
+  appName=v;
+  try{
+    await db.collection('config').doc('app').set({name:v});
+    aplicarAppName();
+    alert('Nombre actualizado a "'+v+'".');
+  }catch(e){ alert('Error: '+e.message+'. ¿Actualizaste las reglas de Firestore?'); }
+}
+
 /* ============ ADMIN ============ */
 async function listarUsuarios(){
   const box=document.getElementById('listaUsuarios');
@@ -1152,7 +1189,7 @@ function verTab(t){
   ['R','T','F','C','Admin'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
   if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; document.getElementById('cPeso').value=S.cfg.peso||''; document.getElementById('cEdad').value=S.cfg.edad||''; document.getElementById('cAltura').value=S.cfg.altura||''; }
   if(t==='F'){ renderFuentes(); renderBloques(); }
-  if(t==='Admin') listarUsuarios();
+  if(t==='Admin'){ listarUsuarios(); document.getElementById('adminAppName').value=appName; }
 }
 function guardarCfg(ev){
   ev.preventDefault();
