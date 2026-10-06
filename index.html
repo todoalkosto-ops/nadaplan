@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#071720">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>NadaPlan — Generador de rutinas 10K</title>
+<title>NadaPlan — Generador de rutinas aguas abiertas</title>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -164,7 +164,7 @@
 <div class="wrap">
 <div id="loginScreen">
   <h2 id="loginTitle">Nada<span>Plan</span></h2>
-  <p>Generador de rutinas para aguas abiertas 10K</p>
+  <p>Generador de rutinas para aguas abiertas</p>
   <div class="loginBox">
     <div id="loginForm">
       <label>Usuario<input id="authUser" placeholder="Ej: juanperez" autocapitalize="none" autocomplete="username"></label>
@@ -187,8 +187,8 @@
 <div id="appMain" style="display:none">
 <div class="userBar" id="userBar"></div>
 <header>
-  <h1 id="appTitle">Nada<span>Plan</span> · 10K aguas abiertas</h1>
-  <p>Generador de rutinas — estructura ENT CAL · ACT · TPPAL · FINAL, ciclos de 4 semanas con progresión</p>
+  <h1 id="appTitle">Nada<span>Plan</span> · aguas abiertas</h1>
+  <p>Generador adaptativo de rutinas — estructura ENT CAL · ACT · TPPAL · FINAL, ciclos de 4 semanas con progresión</p>
 </header>
 
 <div class="estado" id="estado"></div>
@@ -261,15 +261,22 @@
 
 <div id="vC" class="hid">
   <div class="card">
+    <div id="onboardBanner" style="display:none">
+      <div class="aviso verde" style="font-size:15px;margin-bottom:14px">
+        <span>👋 <b>¡Bienvenido!</b> Antes de empezar, configurá tus parámetros de entrenamiento.</span>
+      </div>
+    </div>
     <h4 class="sec" style="margin-top:0">MIS PARÁMETROS</h4>
     <form class="testf" onsubmit="guardarCfg(event)">
-      <label class="f">R1 cada 100 m (mm:ss)<input id="cR1" pattern="\d{1,2}:\d{2}"></label>
-      <label class="f">Minutos por sesión<input id="cMin" type="number" min="40" max="150"></label>
+      <label class="f">R1 cada 100 m (mm:ss)<input id="cR1" pattern="\d{1,2}:\d{2}" placeholder="2:00"></label>
+      <label class="f">Minutos por sesión<input id="cMin" type="number" min="40" max="150" placeholder="90"></label>
       <label class="f">Peso (kg)<input id="cPeso" type="number" min="30" max="200" step="0.5"></label>
       <label class="f">Edad (años)<input id="cEdad" type="number" min="10" max="99"></label>
-      <label class="f">Altura (cm)<input id="cAltura" type="number" min="100" max="220"></label>
-      <button class="btn pri" type="submit">Guardar</button>
+      <label class="f">Altura (cm)<input id="cAltura" type="number" min="100" max="220" placeholder="175"></label>
+      <label class="f">Objetivo de carrera<select id="cDist"><option value="5">5 km</option><option value="7">7 km</option><option value="10" selected>10 km</option><option value="15">15 km</option><option value="20">20 km</option></select></label>
+      <button class="btn pri" type="submit" id="btnGuardarCfg">Guardar</button>
     </form>
+    <p class="nota"><b>Objetivo de carrera:</b> el generador adapta el volumen por sesión, la intensidad dominante, la frecuencia de tolerancia y el largo del simulacro según la distancia elegida. Para 5–7 km: más velocidad y cambios de ritmo. Para 15–20 km: más volumen aeróbico y práctica de nutrición en el agua.</p>
     <p class="nota">Las calorías se estiman con <b>METs corregidos</b>: la app calcula tu metabolismo basal con Harris-Benedict (usa peso, edad y altura), y aplica un MET distinto a cada bloque de la sesión según su intensidad (entrada en calor ~5.0, trabajo principal aeróbico ~7.0, velocidad ~8.0, resistencia ~7.5, máximos ~9.0, final ~4.5). Si no cargás edad, las kcal no aparecen. La altura es opcional (se estima 175 cm si no la ponés).</p>
     <h4 class="sec">POSICIÓN EN EL PLAN</h4>
     <div class="acciones">
@@ -313,7 +320,7 @@ service cloud.firestore {
     6. Copiá el bloque <code>firebaseConfig</code> que te muestra y pegalo en el archivo <code>index.html</code> reemplazando el bloque que dice "TU_API_KEY" etc.<br>
     7. Subí el archivo actualizado a GitHub y listo — cada persona crea su usuario desde la pantalla de login.
     </div></details>
-    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.6 — nombre de la app configurable desde Admin</p>
+    <p class="nota" style="font-family:var(--mono);opacity:.7">NadaPlan v3.8 — onboarding obligatorio para nuevos usuarios</p>
   </div>
 </div>
 
@@ -364,6 +371,10 @@ function showApp(){
   // mostrar pestaña admin solo para el admin
   const tabAdmin=document.getElementById('tabAdmin');
   if(tabAdmin) tabAdmin.style.display=esAdmin()?'inline-block':'none';
+  // usuario nuevo: configuración inicial obligatoria
+  if(!S.cfg.onboarded){
+    setTimeout(()=>{ verTab('C'); },50);
+  }
 }
 async function doLogin(){
   const u=document.getElementById('authUser').value.trim(), p=document.getElementById('authPass').value;
@@ -381,7 +392,7 @@ async function doRegister(){
   catch(e){ showErr(e.code==='auth/email-already-in-use'?'Ese usuario ya existe. Probá ingresar.':'Error: '+e.message); }
 }
 function estadoNuevo(){
-  return { cfg:{r1:120,min:90,peso:0,edad:0,altura:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
+  return { cfg:{r1:120,min:90,peso:0,edad:0,altura:0,distObj:10,onboarded:false}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
 }
 function doLogout(){ localStorage.removeItem(KEY); auth.signOut(); }
 function showErr(m){ const el=document.getElementById('authErr'); if(el) el.textContent=m; }
@@ -400,8 +411,8 @@ async function reintentar(){
   const nube=await cargarDesdeNube();
   if(nube&&nube._status==='aprobado'){
     S=nube;
-    if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0;
-    persistir(); showApp(); render();
+    if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0; if(!S.cfg.distObj) S.cfg.distObj=10; if(S.cfg.onboarded===undefined) S.cfg.onboarded=true;
+    persistir(); showApp(); aplicarAppName(); render();
   } else { alert('Tu cuenta todavía no fue aprobada.'); }
 }
 
@@ -437,16 +448,16 @@ if(fbOk){
         if(nube&&nube.cfg) S=nube;
         else S=estadoNuevo();
         S._status='aprobado';
-        if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0;
-        persistir(); showApp(); render();
+        if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0; if(!S.cfg.distObj) S.cfg.distObj=10; if(S.cfg.onboarded===undefined) S.cfg.onboarded=true;
+        persistir(); showApp(); aplicarAppName(); render();
         return;
       }
       // usuario existente: chequear status
       if(nube){
         if(nube._status==='aprobado'){
           S=nube;
-          if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0;
-          persistir(); showApp(); render();
+          if(!S.fuentes) S.fuentes=[]; if(!S.bloquesUser) S.bloquesUser=[]; if(!S.cfg.peso) S.cfg.peso=0; if(!S.cfg.edad) S.cfg.edad=0; if(!S.cfg.altura) S.cfg.altura=0; if(!S.cfg.distObj) S.cfg.distObj=10; if(S.cfg.onboarded===undefined) S.cfg.onboarded=true;
+          persistir(); showApp(); aplicarAppName(); render();
         } else {
           showPendiente();
         }
@@ -472,7 +483,7 @@ if(fbOk){
 const KEY='nadaplan_v1';
 let S = cargarLocal();
 function cargarLocal(){
-  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; if(!d.cfg.peso) d.cfg.peso=0; if(!d.cfg.edad) d.cfg.edad=0; if(!d.cfg.altura) d.cfg.altura=0; return d; } }catch(e){}
+  try{ const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.cfg){ if(!d.fuentes) d.fuentes=[]; if(!d.bloquesUser) d.bloquesUser=[]; if(!d.cfg.peso) d.cfg.peso=0; if(!d.cfg.edad) d.cfg.edad=0; if(!d.cfg.altura) d.cfg.altura=0; if(!d.cfg.distObj) d.cfg.distObj=10; if(d.cfg.onboarded===undefined) d.cfg.onboarded=true; return d; } }catch(e){}
   return { cfg:{r1:120,min:90,peso:0}, pos:{ciclo:1,sem:1,dia:1}, variante:{}, sesiones:[], tests:[], fuentes:[], bloquesUser:[] };
 }
 function cargar(){ return cargarLocal(); }
@@ -652,15 +663,20 @@ const D3 = [
    pausaBloque(90),
    L(1,100,'nado técnico',so(100,'R1',25,'tec')),
    L(1,200,['a ','R3'],so(200,'R3',40))]}),
- n=>({t:'simulacro de río', ls:[
-   L(1,400,['','R2',' parejo — empuje suave de pared, SIN deslizamiento subacuático (en el río no hay paredes)'],so(400,'R2',30)),
+ n=>{
+   const dO=S.cfg.distObj||10;
+   // rep de simulacro escala con la distancia objetivo
+   const rep = dO<=5?200 : dO<=7?300 : dO<=10?400 : dO<=15?500 : 600;
+   const nota = dO>=15?' — cada '+rep+'m tomá un trago de agua (práctica de avituallamiento)':'';
+   return {t:'simulacro de río ('+rep+'m)', ls:[
+   L(1,rep,['','R2',' parejo — empuje suave de pared, SIN deslizamiento subacuático (en el río no hay paredes)'+nota],so(rep,'R2',30)),
    L(1,100,'suave de recuperación',null,{mat:'suave',pausa:15}),
-   L(1,400,['','R2',' — orientación cada 6–8 brazadas sin frenar la cadencia'],so(400,'R2',30)),
+   L(1,rep,['','R2',' — orientación cada 6–8 brazadas sin frenar la cadencia'],so(rep,'R2',30)),
    L(1,100,'suave de recuperación',null,{mat:'suave',pausa:15}),
-   L(Math.max(1,n-1),400,['','R2',' — cadencia más alta, brazada un poco más corta (aguanta el oleaje)'],so(400,'R2',30)),
+   L(Math.max(1,n-1),rep,['','R2',' — cadencia más alta, brazada un poco más corta (aguanta el oleaje)'],so(rep,'R2',30)),
    L(Math.max(1,n-1),100,'suave de recuperación',null,{mat:'suave',pausa:15}),
    pausaBloque(60),
-   L(2*n+2,50,['escalera: de ','R1',' a mejor nivel posible, de a pares'],so(50,'R2',30))]})
+   L(2*n+2,50,['escalera: de ','R1',' a mejor nivel posible, de a pares'],so(50,'R2',30))]}}
 ];
 /* --- Tolerancia al lactato (esporádico: semana 3 de ciclos pares) --- */
 const TOL = n=>({t:'tolerancia al lactato', ls:[
@@ -693,7 +709,12 @@ const DESCARGA = {
 /* ============ GENERADOR ============ */
 const FASES=['BASE','CARGA','PICO','DESCARGA'];
 const DIAS={1:'Aeróbico base',2:'Velocidad y técnica',3:'Resistencia específica'};
-function esTolerancia(p){ return p.ciclo%2===0 && p.sem===3 && p.dia===2; }
+function esTolerancia(p){
+  const dO=S.cfg.distObj||10;
+  // 5-7km: cada ciclo (más velocidad) · 10km: cada 2 · 15km: cada 3 · 20km: cada 4
+  const freq = dO<=7?1 : dO<=10?2 : dO<=15?3 : 4;
+  return (freq===1 || p.ciclo%freq===0) && p.sem===3 && p.dia===2;
+}
 function esTest(p){ return p.sem===1 && p.dia===3; }
 
 /* ============ CALORÍAS (METs corregidos + Harris-Benedict) ============ */
@@ -785,7 +806,9 @@ function construir(p,minutos){
   }
   // buscar la sesión más grande que quepa en el tiempo disponible
   let mejor=null;
-  const nMax = desc||tol ? 3 : 5;
+  const distObj=S.cfg.distObj||10;
+  const nMaxBase = distObj<=5?3 : distObj<=7?4 : distObj<=10?5 : distObj<=15?6 : 7;
+  const nMax = desc||tol ? Math.min(nMaxBase,3) : nMaxBase;
   for(let n=nMax;n>=1;n--){
     const w = n>=4?3 : n>=2?2 : 1;
     const wEC = 1; // calentamiento corto siempre (400-500m), los metros van al trabajo principal
@@ -839,10 +862,15 @@ function render(){
   if(!hecha && ses.recortada && !ses.excedido) h+='<div class="aviso">Versión recortada para que entre en '+S.cfg.min+' min: sin activación y con final mínimo. Con 70–75 min tendrías la sesión completa.</div>';
   if(!hecha && ses.excedido) h+='<div class="aviso rojo">Ni la versión recortada entra en '+S.cfg.min+' min: te va a llevar ~'+Math.round(ses.secs/60)+' min. Cortá donde puedas o sumá minutos en Ajustes.</div>';
   if(ses.test) h+='<div class="aviso">Hoy hay <b>TEST</b>: cronometrá los 3x200 del bloque final del TPPAL y cargalos en "Tests y progreso".</div>';
-  if(ses.tol) h+='<div class="aviso rojo">Sesión esporádica de <b>tolerancia</b>: poco volumen, máxima intensidad, descansos largos. No la repitas por tu cuenta — vuelve recién en dos ciclos.</div>';
+  if(ses.tol){ const dO=S.cfg.distObj||10; const frq=dO<=7?'cada ciclo':dO<=10?'cada 2 ciclos':dO<=15?'cada 3 ciclos':'cada 4 ciclos'; h+='<div class="aviso rojo">Sesión esporádica de <b>tolerancia</b>: poco volumen, máxima intensidad, descansos largos. Para '+dO+'K aparece '+frq+'.</div>'; }
   if(ses.desc) h+='<div class="aviso verde">Semana de <b>descarga</b>: todo cómodo, sin forzar. Acá se asimila la carga de las tres semanas anteriores.</div>';
   const c=p.ciclo, dens=Math.round((1-fDesc(p.sem,c)/([1,.95,.9,1.25][p.sem-1]))*100);
   if(c>1 && p.sem<4) h+='<div class="aviso">Ciclo '+c+': descansos ~'+dens+'&nbsp;% más apretados que en el ciclo 1, con tus mismos ritmos. Si actualizaste el R1 con un test, la exigencia ya está incorporada en los tiempos.</div>';
+  // notas por distancia objetivo
+  const distObj=S.cfg.distObj||10;
+  if(!hecha && !ses.desc && distObj<=7 && p.dia===2) h+='<div class="aviso">Objetivo <b>'+distObj+'K</b>: en distancias cortas, los cambios de ritmo son clave. Buscá sentir la velocidad R3 con soltura.</div>';
+  if(!hecha && !ses.desc && distObj>=15 && p.dia===1) h+='<div class="aviso">Objetivo <b>'+distObj+'K</b>: la base aeróbica es tu motor. Concentrate en mantener un ritmo parejo y sostenible por largos períodos.</div>';
+  if(!hecha && !ses.desc && distObj>=15 && p.dia===3 && p.sem===3) h+='<div class="aviso">Objetivo <b>'+distObj+'K</b>: aprovechá el simulacro para practicar el avituallamiento (tomar agua cada 30 min en carrera).</div>';
 
   bloques.forEach(b=>{
     const mB=b.ls.reduce((a,l)=>a+l.m,0);
@@ -940,6 +968,7 @@ function renderTests(){
     '<div class="kpi"><div class="v">'+km.toFixed(1)+' km</div><div class="l">nadados en el plan</div></div>'+
     '<div class="kpi"><div class="v">'+(mejor?fmt(mejor):'—')+'</div><div class="l">mejor ritmo de test /100</div></div>'+
     '<div class="kpi"><div class="v">'+fmt(S.cfg.r1)+'</div><div class="l">R1 vigente /100</div></div>'+
+    '<div class="kpi"><div class="v">'+(S.cfg.distObj||10)+' km</div><div class="l">objetivo de carrera</div></div>'+
     (kcalTotal?'<div class="kpi"><div class="v">'+(kcalTotal/1000).toFixed(1)+' k</div><div class="l">kcal quemadas (estimadas)</div></div>':'');
   // tabla
   let th='<tr><th>Fecha</th><th>200 nº1</th><th>200 nº2</th><th>200 nº3</th><th>Ritmo /100</th></tr>';
@@ -978,7 +1007,8 @@ function imprimirSesion(){
   const p=S.pos, ses=construir(p,S.cfg.min);
   const fase=FASES[p.sem-1];
   const hoy=new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  let h='<div class="ph">'+escF(appName)+' — '+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</div>';
+  const dO=S.cfg.distObj||10;
+  let h='<div class="ph">'+escF(appName)+' ('+dO+'K) — '+(ses.tol?'Tolerancia al lactato':(p.sem===4?'Descarga · sesión '+p.dia:DIAS[p.dia]))+'</div>';
   const kcalPrint=calcKcal(ses,p,S.cfg);
   h+='<div class="pm">Sesión N° '+(S.sesiones.length+1)+' · '+hoy+' · Ciclo '+p.ciclo+' · Semana '+p.sem+' ('+fase+') · Día '+p.dia+'/3 · '+ses.m.toLocaleString('es-AR')+' m · ~'+Math.round(ses.secs/60)+' min'+(kcalPrint?' · ~'+kcalPrint+' kcal':'')+'</div>';
   if(ses.test) h+='<div class="pav">TEST: cronometrar los 3x200 del final del TPPAL y cargarlos en la app.</div>';
@@ -1108,9 +1138,10 @@ let appName='NadaPlan';
 function aplicarAppName(){
   const t=document.getElementById('appTitle');
   const l=document.getElementById('loginTitle');
-  if(t) t.innerHTML=escF(appName)+' · <span style="color:var(--aqua)">10K aguas abiertas</span>';
+  const dO=(S&&S.cfg&&S.cfg.distObj)||10;
+  if(t) t.innerHTML=escF(appName)+' · <span style="color:var(--aqua)">'+dO+'K aguas abiertas</span>';
   if(l) l.innerHTML=escF(appName);
-  document.title=appName+' — Generador de rutinas 10K';
+  document.title=appName+' — Generador de rutinas '+dO+'K';
 }
 async function cargarAppName(){
   if(!fbOk) return;
@@ -1186,8 +1217,15 @@ async function eliminarUsuario(uid,nombre){
 
 /* ============ CONFIG / RESPALDO ============ */
 function verTab(t){
+  // si no completó la configuración inicial, solo puede ver Ajustes
+  if(!S.cfg.onboarded && t!=='C') return;
   ['R','T','F','C','Admin'].forEach(x=>{ document.getElementById('v'+x).classList.toggle('hid',x!==t); document.getElementById('tab'+x).classList.toggle('act',x===t); });
-  if(t==='C'){ document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; document.getElementById('cPeso').value=S.cfg.peso||''; document.getElementById('cEdad').value=S.cfg.edad||''; document.getElementById('cAltura').value=S.cfg.altura||''; }
+  if(t==='C'){
+    document.getElementById('cR1').value=fmt(S.cfg.r1); document.getElementById('cMin').value=S.cfg.min; document.getElementById('cPeso').value=S.cfg.peso||''; document.getElementById('cEdad').value=S.cfg.edad||''; document.getElementById('cAltura').value=S.cfg.altura||''; document.getElementById('cDist').value=S.cfg.distObj||10;
+    const onb=!S.cfg.onboarded;
+    document.getElementById('onboardBanner').style.display=onb?'':'none';
+    document.getElementById('btnGuardarCfg').textContent=onb?'Guardar y empezar':'Guardar';
+  }
   if(t==='F'){ renderFuentes(); renderBloques(); }
   if(t==='Admin'){ listarUsuarios(); document.getElementById('adminAppName').value=appName; }
 }
@@ -1195,9 +1233,20 @@ function guardarCfg(ev){
   ev.preventDefault();
   const r=parse(document.getElementById('cR1').value), m=+document.getElementById('cMin').value, p=+document.getElementById('cPeso').value;
   const e=+document.getElementById('cEdad').value, a=+document.getElementById('cAltura').value;
+  const dO=+document.getElementById('cDist').value;
+  // en la configuración inicial, exigir al menos R1, peso y edad
+  if(!S.cfg.onboarded){
+    if(!r){ alert('Cargá tu ritmo R1 (ej: 2:00).'); return; }
+    if(!(p>=30&&p<=200)){ alert('Cargá tu peso en kg.'); return; }
+    if(!(e>=10&&e<=99)){ alert('Cargá tu edad.'); return; }
+  }
   if(r) S.cfg.r1=r; if(m>=40&&m<=150) S.cfg.min=m; if(p>=30&&p<=200) S.cfg.peso=p;
   if(e>=10&&e<=99) S.cfg.edad=e; if(a>=100&&a<=220) S.cfg.altura=a;
-  persistir(); render(); verTab('R');
+  if([5,7,10,15,20].includes(dO)) S.cfg.distObj=dO;
+  const wasOnboarding=!S.cfg.onboarded;
+  S.cfg.onboarded=true;
+  persistir(); aplicarAppName(); render(); verTab('R');
+  if(wasOnboarding) document.getElementById('onboardBanner').style.display='none';
 }
 function exportar(){
   const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});
